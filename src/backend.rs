@@ -19,6 +19,7 @@ pub(crate) trait Backend {
     fn present(&self) -> Result<()>;
 
     unsafe fn create_texture(&mut self, data: &[u8], width: u32, height: u32, format: PixelFormat) -> Result<ImageData>;
+    unsafe fn update_texture(&mut self, data: &[u8], rect: &Rectangle, format: PixelFormat);
     unsafe fn destroy_texture(&mut self, data: &mut ImageData);
 
     unsafe fn create_surface(&mut self, image: &Image) -> Result<SurfaceData>;

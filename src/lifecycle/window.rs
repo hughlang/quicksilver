@@ -1,13 +1,13 @@
 use crate::{
     Result,
-    backend::{Backend, BackendImpl, instance, set_instance},
+    backend::{Backend, BackendImpl, ImageData, instance, set_instance},
     geom::{Rectangle, Scalar, Transform, Vector},
     graphics::{Background, BlendMode, Color, Drawable, Mesh, PixelFormat, ResizeStrategy, View},
     input::{ButtonState, Gamepad, Keyboard, Mouse, MouseCursor},
     lifecycle::{Event, Settings},
 };
 use image::{
-    DynamicImage, RgbImage, RgbaImage,
+    DynamicImage, GrayAlphaImage, RgbImage, RgbaImage,
 };
 #[cfg(feature = "gilrs")] use {
     crate::input::{GAMEPAD_BUTTON_LIST, GILRS_GAMEPAD_LIST},
@@ -508,6 +508,7 @@ impl Window {
         let img = match format {
             PixelFormat::RGB => DynamicImage::ImageRgb8(RgbImage::from_raw(width, height, buffer).expect("TODO")),
             PixelFormat::RGBA => DynamicImage::ImageRgba8(RgbaImage::from_raw(width, height, buffer).expect("TODO")),
+            PixelFormat::Alpha => DynamicImage::ImageLumaA8(GrayAlphaImage::from_raw(width, height, buffer).expect("TODO")),
         };
         img.flipv()
     }
@@ -518,5 +519,10 @@ impl Window {
 
     pub(crate) fn backend(&mut self) -> &'static mut BackendImpl {
         unsafe { instance() }
+    }
+
+    /// Passthru method to access the backend OpenGL/WebGL method
+    pub fn create_texture(&mut self, data: &[u8], width: u32, height: u32, format: PixelFormat) -> Result<ImageData> {
+        unsafe { self.backend().create_texture(data, width, height, format) }
     }
 }

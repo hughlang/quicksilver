@@ -105,4 +105,14 @@ impl FontStyle {
             color
         }
     }
+
+    /// Getter for size. Returns f32
+    pub fn get_size(&self) -> f32 {
+        self.size
+    }
+
+    /// Getter for Color, which has r,g,b,a values of 0.0 to 1.0
+    pub fn get_color(&self) -> Color {
+        self.color
+    }
 }

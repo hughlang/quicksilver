@@ -29,14 +29,14 @@ pub struct WebGLBackend {
     gl_ctx: gl,
     texture: Option<u32>,
     vertices: Vec<f32>,
-    indices: Vec<u32>, 
-    vertex_length: usize, 
-    index_length: usize, 
-    shader: WebGLProgram, 
-    fragment: WebGLShader, 
-    vertex: WebGLShader, 
-    vbo: WebGLBuffer, 
-    ebo: WebGLBuffer, 
+    indices: Vec<u32>,
+    vertex_length: usize,
+    index_length: usize,
+    shader: WebGLProgram,
+    fragment: WebGLShader,
+    vertex: WebGLShader,
+    vbo: WebGLBuffer,
+    ebo: WebGLBuffer,
     texture_location: Option<WebGLUniformLocation>,
     texture_mode: u32,
     initial_width: u32,
@@ -127,10 +127,10 @@ impl Backend for WebGLBackend {
             gl_ctx,
             texture: None,
             vertices: Vec::with_capacity(1024),
-            indices: Vec::with_capacity(1024), 
-            vertex_length: 0, 
-            index_length: 0, 
-            shader, fragment, vertex, vbo, ebo, 
+            indices: Vec::with_capacity(1024),
+            vertex_length: 0,
+            index_length: 0,
+            shader, fragment, vertex, vbo, ebo,
             texture_location: None,
             texture_mode,
             initial_width,
@@ -266,6 +266,22 @@ impl Backend for WebGLBackend {
         Ok(ImageData { id, width, height })
     }
 
+    unsafe fn update_texture(&mut self, data: &[u8], rect: &Rectangle, format: PixelFormat) {
+        // let format = format_gl(format);
+        // // https://developer.mozilla.org/en-US/docs/Web/API/WebGLRenderingContext/texSubImage2D
+        // gl::TexSubImage2D(
+        //     gl::TEXTURE_2D,
+        //     0,
+        //     rect.x() as _,
+        //     rect.y() as _,
+        //     rect.width() as _,
+        //     rect.height() as _,
+        //     format,
+        //     gl::UNSIGNED_BYTE,
+        //     data.as_ptr() as _,
+        // );
+    }
+
     unsafe fn destroy_texture(&mut self, data: &mut ImageData) {
         self.gl_ctx.delete_texture(self.textures[data.id as usize].as_ref());
     }
@@ -279,14 +295,14 @@ impl Backend for WebGLBackend {
         self.gl_ctx.draw_buffers(&[gl::COLOR_ATTACHMENT0]);
         Ok(surface)
     }
-    
+
     unsafe fn bind_surface(&mut self, surface: &Surface) {
         self.gl_ctx.bind_framebuffer(gl::FRAMEBUFFER, Some(&surface.data.framebuffer));
         self.gl_ctx.viewport(0, 0, surface.image.source_width() as i32, surface.image.source_height() as i32);
     }
 
     unsafe fn unbind_surface(&mut self, _surface: &Surface, viewport: &[i32]) {
-        self.gl_ctx.bind_framebuffer(gl::FRAMEBUFFER, None); 
+        self.gl_ctx.bind_framebuffer(gl::FRAMEBUFFER, None);
         self.gl_ctx.viewport(viewport[0], viewport[1], viewport[2], viewport[3]);
     }
 
@@ -357,7 +373,7 @@ impl Backend for WebGLBackend {
 }
 
 impl Drop for WebGLBackend {
-    fn drop(&mut self) { 
+    fn drop(&mut self) {
         self.gl_ctx.delete_program(Some(&self.shader));
         self.gl_ctx.delete_shader(Some(&self.fragment));
         self.gl_ctx.delete_shader(Some(&self.vertex));

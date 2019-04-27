@@ -17,15 +17,15 @@ pub struct GL3Backend {
     context: WindowedContext,
     texture: u32,
     vertices: Vec<f32>,
-    indices: Vec<u32>, 
-    vertex_length: usize, 
-    index_length: usize, 
-    shader: u32, 
-    fragment: u32, 
-    vertex: u32, 
-    vbo: u32, 
-    ebo: u32, 
-    vao: u32, 
+    indices: Vec<u32>,
+    vertex_length: usize,
+    index_length: usize,
+    shader: u32,
+    fragment: u32,
+    vertex: u32,
+    vbo: u32,
+    ebo: u32,
+    vao: u32,
     texture_location: i32,
     texture_mode: u32
 }
@@ -60,6 +60,7 @@ const NULL_TEXTURE_ID: u32 = 0;
 
 fn format_gl(format: PixelFormat) -> u32 {
     match format {
+        PixelFormat::Alpha => gl::ALPHA,
         PixelFormat::RGB => gl::RGB,
         PixelFormat::RGBA => gl::RGBA
     }
@@ -116,16 +117,16 @@ impl Backend for GL3Backend {
             context,
             texture: NULL_TEXTURE_ID,
             vertices: Vec::with_capacity(1024),
-            indices: Vec::with_capacity(1024), 
-            vertex_length: 0, 
-            index_length: 0, 
-            shader, fragment, vertex, 
-            vbo, ebo, vao, 
+            indices: Vec::with_capacity(1024),
+            vertex_length: 0,
+            index_length: 0,
+            shader, fragment, vertex,
+            vbo, ebo, vao,
             texture_location: 0,
             texture_mode
         })
     }
-    
+
     unsafe fn clear(&mut self, col: Color) {
         gl::ClearColor(col.r, col.g, col.b, col.a);
         gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
@@ -158,7 +159,7 @@ impl Backend for GL3Backend {
             self.vertices.push(vertex.col.g);
             self.vertices.push(vertex.col.b);
             self.vertices.push(vertex.col.a);
-            self.vertices.push(if vertex.tex_pos.is_some() { 1f32 } else { 0f32 }); 
+            self.vertices.push(if vertex.tex_pos.is_some() { 1f32 } else { 0f32 });
         });
         let vertex_length = size_of::<f32>() * self.vertices.len();
         // If the GPU can't store all of our data, re-create the GPU buffers so they can
@@ -252,10 +253,26 @@ impl Backend for GL3Backend {
         gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::CLAMP_TO_EDGE as i32);
         gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::NEAREST as i32);
         gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::NEAREST as i32);
-        gl::TexImage2D(gl::TEXTURE_2D, 0, gl::RGBA as i32, width as i32, 
+        gl::TexImage2D(gl::TEXTURE_2D, 0, gl::RGBA as i32, width as i32,
                         height as i32, 0, format, gl::UNSIGNED_BYTE, data);
         gl::GenerateMipmap(gl::TEXTURE_2D);
         Ok(ImageData { id, width, height })
+    }
+
+    unsafe fn update_texture(&mut self, data: &[u8], rect: &Rectangle, format: PixelFormat) {
+        let format = format_gl(format);
+        // https://developer.mozilla.org/en-US/docs/Web/API/WebGLRenderingContext/texSubImage2D
+        gl::TexSubImage2D(
+            gl::TEXTURE_2D,
+            0,
+            rect.x() as _,
+            rect.y() as _,
+            rect.width() as _,
+            rect.height() as _,
+            format,
+            gl::UNSIGNED_BYTE,
+            data.as_ptr() as _,
+        );
     }
 
     unsafe fn destroy_texture(&mut self, data: &mut ImageData) {
@@ -282,7 +299,7 @@ impl Backend for GL3Backend {
     }
 
     unsafe fn unbind_surface(&mut self, _surface: &Surface, viewport: &[i32]) {
-        gl::BindFramebuffer(gl::FRAMEBUFFER, 0); 
+        gl::BindFramebuffer(gl::FRAMEBUFFER, 0);
         gl::Viewport(viewport[0], viewport[1], viewport[2], viewport[3]);
     }
 
@@ -302,9 +319,9 @@ impl Backend for GL3Backend {
         self.context.resize(size.to_physical(dpi));
         let dpi = dpi as f32;
         gl::Viewport(
-            (area.x() * dpi) as i32, 
-            (area.y() * dpi) as i32, 
-            (area.width() * dpi) as i32, 
+            (area.x() * dpi) as i32,
+            (area.y() * dpi) as i32,
+            (area.width() * dpi) as i32,
             (area.height() * dpi) as i32
         );
     }
@@ -312,7 +329,8 @@ impl Backend for GL3Backend {
     unsafe fn screenshot(&self, format: PixelFormat) -> (Vector, Vec<u8>) where Self: Sized {
         let bytes_per_pixel = match format {
             PixelFormat::RGBA => 4,
-            PixelFormat::RGB => 3
+            PixelFormat::RGB => 3,
+            PixelFormat::Alpha => 1,
         };
         let format = format_gl(format);
         let [x, y, width, height] = self.viewport();
@@ -357,7 +375,7 @@ impl Backend for GL3Backend {
 }
 
 impl Drop for GL3Backend {
-    fn drop(&mut self) { 
+    fn drop(&mut self) {
         unsafe {
             gl::DeleteProgram(self.shader);
             gl::DeleteShader(self.fragment);
@@ -365,5 +383,5 @@ impl Drop for GL3Backend {
             gl::DeleteBuffers(2, &[self.vbo, self.ebo] as *const u32);
             gl::DeleteVertexArrays(1, &self.vao as *const u32);
         }
-    } 
+    }
 }

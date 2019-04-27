@@ -17,6 +17,8 @@ use std::{
 ///Pixel formats for use with loading raw images
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub enum PixelFormat {
+    /// Alpha only
+    Alpha,
     /// Red, Green, and Blue
     RGB,
     /// Red, Green, Blue, and Alpha
@@ -142,7 +144,7 @@ impl Error for ImageError {
             &ImageError::IOError(ref err) => err.description(),
         }
     }
-    
+
     fn cause(&self) -> Option<&dyn Error> {
         match self {
             &ImageError::DecodingError(ref err) => Some(err),
