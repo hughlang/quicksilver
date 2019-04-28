@@ -529,8 +529,8 @@ impl Window {
 
     /// Passthru method to access the backend OpenGL/WebGL method.
     /// This is designed to update a rect region in the texture already created in the GPU.
-    pub fn update_texture(&mut self, data: &[u8], rect: &Rectangle, format: PixelFormat) {
-        unsafe { self.backend().update_texture(data, rect, format) }
+    pub fn update_texture(&mut self, texture_id: &u32, data: &[u8], rect: &Rectangle, format: PixelFormat) {
+        unsafe { self.backend().update_texture(texture_id, data, rect, format) }
     }
 
     /// Experimental method to make GL rendering more modular

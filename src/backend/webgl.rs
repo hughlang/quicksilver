@@ -275,7 +275,7 @@ impl Backend for WebGLBackend {
         Ok(ImageData { id, width, height })
     }
 
-    unsafe fn update_texture(&mut self, data: &[u8], rect: &Rectangle, format: PixelFormat) {
+    unsafe fn update_texture(&mut self, texture_id: &u32, data: &[u8], rect: &Rectangle, format: PixelFormat) {
         // let format = format_gl(format);
         // // https://developer.mozilla.org/en-US/docs/Web/API/WebGLRenderingContext/texSubImage2D
         // gl::TexSubImage2D(
@@ -387,7 +387,7 @@ impl Backend for WebGLBackend {
         Ok(id)
     }
 
-    unsafe fn link_program(vs: u32, fs: u32) -> Result<u32> {
+    unsafe fn link_program(&self, vs: u32, fs: u32) -> Result<u32> {
         let shader = try_opt(gl_ctx.create_program(), "Create shader program")?;
         gl_ctx.attach_shader(&shader, &vertex);
         gl_ctx.attach_shader(&shader, &fragment);
@@ -396,7 +396,7 @@ impl Backend for WebGLBackend {
         Ok(shader)
     }
 
-    unsafe fn configure_fields(&mut self, program_id: u32, fields: &[(&str, i32)], out_color: String) -> Result<()> {
+    unsafe fn configure_fields(&self, program_id: u32, fields: &Vec<(String, u32)>, out_color: String) -> Result<()> {
         let float_size = size_of::<f32>() as i64;
         let mut offset = 0;
         let stride_distance = (VERTEX_SIZE * size_of::<f32>()) as i32;
@@ -405,7 +405,7 @@ impl Backend for WebGLBackend {
 
             let attr = self.gl_ctx.get_attrib_location(&program_id, *v_field) as u32;
             self.gl_ctx.enable_vertex_attrib_array(attr);
-            self.gl_ctx.vertex_attrib_pointer(attr, 2, gl::FLOAT, false, stride_distance, 2 * size_of::<f32>() as i64);
+            self.gl_ctx.vertex_attrib_pointer(attr, *float_count as i32, gl::FLOAT, false, stride_distance, 2 * size_of::<f32>() as i64);
             offset += float_count * float_size;
         }
 

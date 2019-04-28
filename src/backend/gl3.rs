@@ -292,9 +292,10 @@ impl Backend for GL3Backend {
         Ok(ImageData { id, width, height })
     }
 
-    unsafe fn update_texture(&mut self, data: &[u8], rect: &Rectangle, format: PixelFormat) {
+    unsafe fn update_texture(&mut self, texture_id: &u32, data: &[u8], rect: &Rectangle, format: PixelFormat) {
         let format = format_gl(format);
         // https://developer.mozilla.org/en-US/docs/Web/API/WebGLRenderingContext/texSubImage2D
+        gl::BindTexture(gl::TEXTURE_2D, *texture_id);
         gl::TexSubImage2D(
             gl::TEXTURE_2D,
             0,
@@ -436,7 +437,7 @@ impl Backend for GL3Backend {
         Ok(shader)
     }
 
-    unsafe fn link_program(vs: u32, fs: u32) -> Result<u32> {
+    unsafe fn link_program(&self, vs: u32, fs: u32) -> Result<u32> {
         let program = gl::CreateProgram();
         gl::AttachShader(program, vs);
         gl::AttachShader(program, fs);
@@ -462,28 +463,33 @@ impl Backend for GL3Backend {
         Ok(program)
     }
 
-    unsafe fn configure_fields(&mut self, program_id: u32, fields: &[(&str, i32)], out_color: String) -> Result<()> {
+    unsafe fn configure_fields(&self, program_id: u32, fields: &Vec<(String, u32)>, out_color: String) -> Result<()> {
         let float_size = size_of::<f32>() as u32;
         let mut offset = 0;
+
+        let vert_size = fields.iter().fold(0, |acc, x| acc + x.1);
+        let stride_distance = (VERTEX_SIZE * size_of::<f32>()) as i32;
+
         for (v_field, float_count) in fields {
-            let c_name = CString::new(*v_field).expect("No interior null bytes in shader").into_raw();
+            let size = *float_count;
+            let c_name = CString::new(v_field.to_string()).expect("No interior null bytes in shader").into_raw();
             let attr = gl::GetAttribLocation(program_id, c_name as *const i8);
             CString::from_raw(c_name);
             if attr < 0 {
                 return Err(QuicksilverError::ContextError(format!("{} GetAttribLocation -> {}", v_field, attr)));
             }
             gl::VertexAttribPointer(
-                attr as _,
-                *float_count,
+                attr as u32,
+                size as i32,
                 gl::FLOAT,
-                gl::FALSE as _,
-                size_of::<Vertex>() as _,
+                gl::FALSE,
+                stride_distance,
                 offset as _,
             );
-            gl::EnableVertexAttribArray(attr as _);
-            gl::VertexAttribDivisor(attr as _, 1);
+            gl::EnableVertexAttribArray(attr as u32);
+            // gl::VertexAttribDivisor(attr as _, 1);
 
-            offset += *float_count as u32 * float_size;
+            offset += size * float_size;
         }
         let raw = CString::new(out_color).expect("No interior null bytes in shader").into_raw();
         gl::BindFragDataLocation(program_id, 0, raw as *mut i8);

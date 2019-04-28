@@ -21,12 +21,12 @@ pub(crate) trait Backend {
     fn present(&self) -> Result<()>;
 
     unsafe fn create_texture(&mut self, data: &[u8], width: u32, height: u32, format: PixelFormat) -> Result<ImageData>;
-    unsafe fn update_texture(&mut self, data: &[u8], rect: &Rectangle, format: PixelFormat);
+    unsafe fn update_texture(&mut self, texture_id: &u32, data: &[u8], rect: &Rectangle, format: PixelFormat);
     unsafe fn destroy_texture(&mut self, data: &mut ImageData);
 
     unsafe fn compile_shader(&self, src: &str, stype: u32) -> Result<u32>;
-    unsafe fn link_program(vs: u32, fs: u32) -> Result<u32>;
-    unsafe fn configure_fields(&mut self, program_id: u32, fields: &[(&str, i32)], out_color: String) -> Result<()>;
+    unsafe fn link_program(&self, vs: u32, fs: u32) -> Result<u32>;
+    unsafe fn configure_fields(&self, program_id: u32, fields: &Vec<(String, u32)>, out_color: String) -> Result<()>;
 
     unsafe fn create_surface(&mut self, image: &Image) -> Result<SurfaceData>;
     unsafe fn bind_surface(&mut self, surface: &Surface);
