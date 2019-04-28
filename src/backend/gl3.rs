@@ -1,20 +1,24 @@
 use crate::{
     Result,
     backend::{Backend, ImageData, SurfaceData, VERTEX_SIZE},
+    error::QuicksilverError,
     geom::{Rectangle, Vector},
-    graphics::{BlendMode, Color, GpuTriangle, Image, ImageScaleStrategy, PixelFormat, Surface, Vertex},
+    graphics::{BlendMode, Color, GLTask, GpuTriangle, Image, ImageScaleStrategy, PixelFormat, Surface, Vertex},
     input::MouseCursor
 };
+use gl::types::*;
 use glutin::{WindowedContext, dpi::LogicalSize};
 use std::{
     ffi::CString,
     mem::size_of,
     os::raw::c_void,
-    ptr::null as nullptr,
+    ptr::{self, null as nullptr},
+    str,
 };
 
 pub struct GL3Backend {
     context: WindowedContext,
+    tasks: Vec<GLTask>,
     texture: u32,
     vertices: Vec<f32>,
     indices: Vec<u32>,
@@ -70,6 +74,19 @@ fn format_gl(format: PixelFormat) -> u32 {
     }
 }
 
+impl GL3Backend {
+
+    fn draw_task(&mut self, task: &GLTask) {
+
+    }
+
+    fn draw_tasks(&mut self) {
+        for task in &mut self.tasks {
+
+        }
+    }
+}
+
 impl Backend for GL3Backend {
     type Platform = WindowedContext;
 
@@ -119,6 +136,7 @@ impl Backend for GL3Backend {
         gl::UseProgram(shader);
         Ok(GL3Backend {
             context,
+            tasks: Vec::new(),
             texture: NULL_TEXTURE_ID,
             vertices: Vec::with_capacity(1024),
             indices: Vec::with_capacity(1024),
@@ -129,6 +147,10 @@ impl Backend for GL3Backend {
             texture_location: 0,
             texture_mode
         })
+    }
+
+    fn add_task(&mut self, task: GLTask) {
+        self.tasks.push(task);
     }
 
     unsafe fn clear(&mut self, col: Color) {
@@ -384,6 +406,90 @@ impl Backend for GL3Backend {
     fn resize(&mut self, size: Vector) {
         self.context.set_inner_size(size.into());
     }
+
+    unsafe fn compile_shader(&self, src: &str, stype: u32) -> Result<u32> {
+        let shader = gl::CreateShader(stype);
+        // Attempt to compile the shader
+        let c_str = CString::new(src.as_bytes()).expect("No interior null bytes in shader").into_raw();
+        gl::ShaderSource(shader, 1, &(c_str as *const i8) as *const *const i8, nullptr());
+        CString::from_raw(c_str);
+        gl::CompileShader(shader);
+
+        // Get the compile status
+        let mut status = GLint::from(gl::FALSE);
+        gl::GetShaderiv(shader, gl::COMPILE_STATUS, &mut status);
+
+        // Fail on error
+        if status != GLint::from(gl::TRUE) {
+            let mut len = 0;
+            gl::GetShaderiv(shader, gl::INFO_LOG_LENGTH, &mut len);
+            let mut buf = Vec::with_capacity(len as usize);
+            buf.set_len((len as usize) - 1); // subtract 1 to skip the trailing null character
+            gl::GetShaderInfoLog(
+                shader,
+                len,
+                ptr::null_mut(),
+                buf.as_mut_ptr() as *mut GLchar,
+            );
+            return Err(QuicksilverError::ContextError(String::from_utf8(buf).unwrap()));
+        }
+        Ok(shader)
+    }
+
+    unsafe fn link_program(vs: u32, fs: u32) -> Result<u32> {
+        let program = gl::CreateProgram();
+        gl::AttachShader(program, vs);
+        gl::AttachShader(program, fs);
+        gl::LinkProgram(program);
+        // Get the link status
+        let mut status = GLint::from(gl::FALSE);
+        gl::GetProgramiv(program, gl::LINK_STATUS, &mut status);
+
+        // Fail on error
+        if status != GLint::from(gl::TRUE) {
+            let mut len: GLint = 0;
+            gl::GetProgramiv(program, gl::INFO_LOG_LENGTH, &mut len);
+            let mut buf = Vec::with_capacity(len as usize);
+            buf.set_len((len as usize) - 1); // subtract 1 to skip the trailing null character
+            gl::GetProgramInfoLog(
+                program,
+                len,
+                ptr::null_mut(),
+                buf.as_mut_ptr() as *mut GLchar,
+            );
+            return Err(QuicksilverError::ContextError(String::from_utf8(buf).unwrap()));
+        }
+        Ok(program)
+    }
+
+    unsafe fn configure_fields(&mut self, program_id: u32, fields: &[(&str, i32)], out_color: String) -> Result<()> {
+        let float_size = size_of::<f32>() as u32;
+        let mut offset = 0;
+        for (v_field, float_count) in fields {
+            let c_name = CString::new(*v_field).expect("No interior null bytes in shader").into_raw();
+            let attr = gl::GetAttribLocation(program_id, c_name as *const i8);
+            CString::from_raw(c_name);
+            if attr < 0 {
+                return Err(QuicksilverError::ContextError(format!("{} GetAttribLocation -> {}", v_field, attr)));
+            }
+            gl::VertexAttribPointer(
+                attr as _,
+                *float_count,
+                gl::FLOAT,
+                gl::FALSE as _,
+                size_of::<Vertex>() as _,
+                offset as _,
+            );
+            gl::EnableVertexAttribArray(attr as _);
+            gl::VertexAttribDivisor(attr as _, 1);
+
+            offset += *float_count as u32 * float_size;
+        }
+        let raw = CString::new(out_color).expect("No interior null bytes in shader").into_raw();
+        gl::BindFragDataLocation(program_id, 0, raw as *mut i8);
+        CString::from_raw(raw);
+        Ok(())
+    }
 }
 
 impl Drop for GL3Backend {
@@ -394,6 +500,11 @@ impl Drop for GL3Backend {
             gl::DeleteShader(self.vertex);
             gl::DeleteBuffers(2, &[self.vbo, self.ebo] as *const u32);
             gl::DeleteVertexArrays(1, &self.vao as *const u32);
+
+            // TODO: delete task refs
+            for task in &self.tasks {
+
+            }
         }
     }
 }

@@ -3,7 +3,7 @@ use crate::{
     backend::{Backend, ImageData, SurfaceData, VERTEX_SIZE},
     geom::{Rectangle, Vector},
     error::QuicksilverError,
-    graphics::{BlendMode, Color, GpuTriangle, Image, ImageScaleStrategy, PixelFormat, Surface, Vertex},
+    graphics::{BlendMode, Color, GLTask, GpuTriangle, Image, ImageScaleStrategy, PixelFormat, Surface, Vertex},
     input::MouseCursor,
 };
 use std::mem::size_of;
@@ -86,6 +86,11 @@ fn try_opt<T>(opt: Option<T>, operation: &str) -> Result<T> {
     }
 }
 
+impl WebGLBackend {
+
+
+}
+
 impl Backend for WebGLBackend {
     type Platform = CanvasElement;
 
@@ -137,6 +142,10 @@ impl Backend for WebGLBackend {
             initial_height,
             textures: Vec::new(),
         })
+    }
+
+    fn add_task(&mut self, task: GLTask) {
+
     }
 
     unsafe fn clear(&mut self, col: Color) {
@@ -369,6 +378,38 @@ impl Backend for WebGLBackend {
     fn resize(&mut self, size: Vector) {
         self.canvas.set_width(size.x as u32);
         self.canvas.set_height(size.y as u32);
+    }
+
+    unsafe fn compile_shader(&self, src: &str, stype: u32) -> Result<u32> {
+        let id = try_opt(gl_ctx.create_shader(stype), "Compile shader")?;
+        gl_ctx.shader_source(&id, src);
+        gl_ctx.compile_shader(&id);
+        Ok(id)
+    }
+
+    unsafe fn link_program(vs: u32, fs: u32) -> Result<u32> {
+        let shader = try_opt(gl_ctx.create_program(), "Create shader program")?;
+        gl_ctx.attach_shader(&shader, &vertex);
+        gl_ctx.attach_shader(&shader, &fragment);
+        gl_ctx.link_program(&shader);
+        gl_ctx.use_program(Some(&shader));
+        Ok(shader)
+    }
+
+    unsafe fn configure_fields(&mut self, program_id: u32, fields: &[(&str, i32)], out_color: String) -> Result<()> {
+        let float_size = size_of::<f32>() as i64;
+        let mut offset = 0;
+        let stride_distance = (VERTEX_SIZE * size_of::<f32>()) as i32;
+
+        for (v_field, float_count) in fields {
+
+            let attr = self.gl_ctx.get_attrib_location(&program_id, *v_field) as u32;
+            self.gl_ctx.enable_vertex_attrib_array(attr);
+            self.gl_ctx.vertex_attrib_pointer(attr, 2, gl::FLOAT, false, stride_distance, 2 * size_of::<f32>() as i64);
+            offset += float_count * float_size;
+        }
+
+        Ok(())
     }
 }
 

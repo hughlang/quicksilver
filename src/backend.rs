@@ -1,7 +1,7 @@
 use crate::{
     Result,
     geom::{Rectangle, Vector},
-    graphics::{Background::Col, BlendMode, Color, GpuTriangle, Image, ImageScaleStrategy, PixelFormat, Surface, Vertex},
+    graphics::{Background::Col, BlendMode, Color, GLTask, GpuTriangle, Image, ImageScaleStrategy, PixelFormat, Surface, Vertex},
     input::MouseCursor,
 };
 
@@ -9,6 +9,8 @@ pub(crate) trait Backend {
     type Platform;
 
     unsafe fn new(platform: Self::Platform, texture_mode: ImageScaleStrategy, multisample: bool) -> Result<Self> where Self: Sized;
+
+    fn add_task(&mut self, task: GLTask);
 
     unsafe fn set_blend_mode(&mut self, blend: BlendMode);
     unsafe fn reset_blend_mode(&mut self);
@@ -21,6 +23,10 @@ pub(crate) trait Backend {
     unsafe fn create_texture(&mut self, data: &[u8], width: u32, height: u32, format: PixelFormat) -> Result<ImageData>;
     unsafe fn update_texture(&mut self, data: &[u8], rect: &Rectangle, format: PixelFormat);
     unsafe fn destroy_texture(&mut self, data: &mut ImageData);
+
+    unsafe fn compile_shader(&self, src: &str, stype: u32) -> Result<u32>;
+    unsafe fn link_program(vs: u32, fs: u32) -> Result<u32>;
+    unsafe fn configure_fields(&mut self, program_id: u32, fields: &[(&str, i32)], out_color: String) -> Result<()>;
 
     unsafe fn create_surface(&mut self, image: &Image) -> Result<SurfaceData>;
     unsafe fn bind_surface(&mut self, surface: &Surface);

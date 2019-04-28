@@ -2,7 +2,7 @@ use crate::{
     Result,
     backend::{Backend, BackendImpl, ImageData, instance, set_instance},
     geom::{Rectangle, Scalar, Transform, Vector},
-    graphics::{Background, BlendMode, Color, Drawable, Mesh, PixelFormat, ResizeStrategy, View},
+    graphics::{Background, BlendMode, Color, Drawable, GLTask, Mesh, PixelFormat, ResizeStrategy, View},
     input::{ButtonState, Gamepad, Keyboard, Mouse, MouseCursor},
     lifecycle::{Event, Settings},
 };
@@ -531,5 +531,10 @@ impl Window {
     /// This is designed to update a rect region in the texture already created in the GPU.
     pub fn update_texture(&mut self, data: &[u8], rect: &Rectangle, format: PixelFormat) {
         unsafe { self.backend().update_texture(data, rect, format) }
+    }
+
+    /// Experimental method to make GL rendering more modular
+    pub fn add_task(&mut self, task: &GLTask) {
+
     }
 }
