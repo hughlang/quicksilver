@@ -92,6 +92,7 @@ impl Window {
             MouseCursor::None
         });
         window.set_fullscreen(settings.fullscreen);
+        window.set_size(actual_size);
         Ok(window)
     }
 
@@ -524,5 +525,11 @@ impl Window {
     /// Passthru method to access the backend OpenGL/WebGL method
     pub fn create_texture(&mut self, data: &[u8], width: u32, height: u32, format: PixelFormat) -> Result<ImageData> {
         unsafe { self.backend().create_texture(data, width, height, format) }
+    }
+
+    /// Passthru method to access the backend OpenGL/WebGL method.
+    /// This is designed to update a rect region in the texture already created in the GPU.
+    pub fn update_texture(&mut self, data: &[u8], rect: &Rectangle, format: PixelFormat) {
+        unsafe { self.backend().update_texture(data, rect, format) }
     }
 }

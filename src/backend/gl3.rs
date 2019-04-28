@@ -52,8 +52,12 @@ in float Uses_texture;
 out vec4 outColor;
 uniform sampler2D tex;
 void main() {
-    vec4 tex_color = (Uses_texture != 0) ? texture(tex, Tex_coord) : vec4(1, 1, 1, 1);
-    outColor = Color * tex_color;
+    if (Uses_texture != 0) {
+        float alpha = texture(tex, Tex_coord).a;
+        outColor = Color * vec4(1.0, 1.0, 1.0, alpha);
+    } else {
+        outColor = Color;
+    }
 }"#;
 
 const NULL_TEXTURE_ID: u32 = 0;
@@ -108,7 +112,7 @@ impl Backend for GL3Backend {
         let shader = gl::CreateProgram();
         gl::AttachShader(shader, vertex);
         gl::AttachShader(shader, fragment);
-        let raw = CString::new("out_color").expect("No interior null bytes in shader").into_raw();
+        let raw = CString::new("outColor").expect("No interior null bytes in shader").into_raw();
         gl::BindFragDataLocation(shader, 0, raw as *mut i8);
         CString::from_raw(raw);
         gl::LinkProgram(shader);
@@ -178,15 +182,19 @@ impl Backend for GL3Backend {
             let pos_attrib = gl::GetAttribLocation(self.shader, position_string as *const i8) as u32;
             gl::EnableVertexAttribArray(pos_attrib);
             gl::VertexAttribPointer(pos_attrib, 2, gl::FLOAT, gl::FALSE, stride_distance, nullptr());
+
             let tex_attrib = gl::GetAttribLocation(self.shader, tex_coord_string as *const i8) as u32;
             gl::EnableVertexAttribArray(tex_attrib);
             gl::VertexAttribPointer(tex_attrib, 2, gl::FLOAT, gl::FALSE, stride_distance, (2 * size_of::<f32>()) as *const c_void);
+
             let col_attrib = gl::GetAttribLocation(self.shader, color_string as *const i8) as u32;
             gl::EnableVertexAttribArray(col_attrib);
             gl::VertexAttribPointer(col_attrib, 4, gl::FLOAT, gl::FALSE, stride_distance, (4 * size_of::<f32>()) as *const c_void);
+
             let use_texture_attrib = gl::GetAttribLocation(self.shader, use_texture_string as *const i8) as u32;
             gl::EnableVertexAttribArray(use_texture_attrib);
             gl::VertexAttribPointer(use_texture_attrib, 1, gl::FLOAT, gl::FALSE, stride_distance, (8 * size_of::<f32>()) as *const c_void);
+
             self.texture_location = gl::GetUniformLocation(self.shader, tex_string as *const i8);
             // Make sure to deallocate the attribute strings
             CString::from_raw(position_string);
@@ -221,6 +229,7 @@ impl Backend for GL3Backend {
             let index_length = size_of::<u32>() * self.indices.len();
             let index_data = self.indices.as_ptr() as *const c_void;
             if index_length > self.index_length {
+                eprintln!("index_length={:?} was={:?}", index_length, self.index_length);
                 self.index_length = index_length * 2;
                 gl::BufferData(gl::ELEMENT_ARRAY_BUFFER, self.index_length as isize, nullptr(), gl::STREAM_DRAW);
             }
@@ -248,12 +257,14 @@ impl Backend for GL3Backend {
             gl::GenTextures(1, &mut texture as *mut u32);
             texture
         };
+        eprintln!("Created texture id={} width x={:?} y={:?}", id, width, height);
+        self.texture = id;
         gl::BindTexture(gl::TEXTURE_2D, id);
         gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::CLAMP_TO_EDGE as i32);
         gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::CLAMP_TO_EDGE as i32);
         gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::NEAREST as i32);
         gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::NEAREST as i32);
-        gl::TexImage2D(gl::TEXTURE_2D, 0, gl::RGBA as i32, width as i32,
+        gl::TexImage2D(gl::TEXTURE_2D, 0, format as i32, width as i32,
                         height as i32, 0, format, gl::UNSIGNED_BYTE, data);
         gl::GenerateMipmap(gl::TEXTURE_2D);
         Ok(ImageData { id, width, height })
@@ -316,6 +327,7 @@ impl Backend for GL3Backend {
     unsafe fn set_viewport(&mut self, area: Rectangle) where Self: Sized {
         let size: LogicalSize = area.size().into();
         let dpi = self.context.get_hidpi_factor();
+        eprintln!("logical size={:?} physical size={:?}", size, size.to_physical(dpi));
         self.context.resize(size.to_physical(dpi));
         let dpi = dpi as f32;
         gl::Viewport(
