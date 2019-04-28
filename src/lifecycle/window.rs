@@ -49,6 +49,7 @@ pub struct Window {
     max_updates: u32,
     draw_rate: f64,
     mesh: Mesh,
+    tasks: Vec<GLTask>,
     frame_count: f64,
     fps: f64,
     last_framerate: f64,
@@ -80,6 +81,7 @@ impl Window {
             max_updates: settings.max_updates,
             draw_rate: settings.draw_rate,
             mesh: Mesh::new(),
+            tasks: Vec::new(),
             frame_count: 0.0,
             fps: 0.0,
             last_framerate: 0.0,
@@ -349,6 +351,7 @@ impl Window {
             self.backend().draw(self.mesh.vertices.as_slice(), self.mesh.triangles.as_slice())?;
         }
         self.mesh.clear();
+        self.tasks.clear();
         Ok(())
     }
 
@@ -534,7 +537,7 @@ impl Window {
     }
 
     /// Experimental method to make GL rendering more modular
-    pub fn add_task(&mut self, task: &GLTask) {
-
+    pub fn add_task(&mut self, task: GLTask) {
+        self.tasks.push(task);
     }
 }

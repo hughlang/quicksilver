@@ -79,12 +79,6 @@ impl GL3Backend {
     fn draw_task(&mut self, task: &GLTask) {
 
     }
-
-    fn draw_tasks(&mut self) {
-        for task in &mut self.tasks {
-
-        }
-    }
 }
 
 impl Backend for GL3Backend {

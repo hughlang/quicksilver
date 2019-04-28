@@ -9,11 +9,12 @@ use crate::{
     lifecycle::Window,
 };
 
-use gl::types::*;
+// use gl::types::*;
 
 /// This is a wrapper object that holds the info necessary for executing a set of GL instructions.
 /// This modularity allows Quicksilver to handle multiple GL processing jobs separately with
 /// different shader programs and expected outputs.
+// #[derive(Clone)]
 pub struct GLTask {
     /// All the vertices in the task
     pub vertices: Vec<Vertex>,
@@ -28,11 +29,14 @@ pub struct GLTask {
     program_id: u32,
     fragment_shader_id: u32,
     vertex_shader_id: u32,
-
+    serializer: Box<dyn Fn(Vertex) -> Vec<f32> + 'static>,
 }
 
 impl Default for GLTask {
     fn default() -> Self {
+        let default = |_vertex| -> Vec<f32> {
+            Vec::new()
+        };
         GLTask {
             vertices: Vec::new(),
             triangles: Vec::new(),
@@ -42,13 +46,14 @@ impl Default for GLTask {
             program_id: 0,
             fragment_shader_id: 0,
             vertex_shader_id: 0,
+            serializer: Box::new(default),
         }
     }
 }
 
 impl GLTask {
 
-    /// Constructor
+    /// Initialize both shaders using the provided strings which contain OpenGL/WebGL code
     pub fn init_shaders(mut self, vertex_shader: &str, fragment_shader: &str, window: &mut Window) -> Self {
         unsafe {
             let vs = window.backend().compile_shader(vertex_shader, gl::VERTEX_SHADER);
@@ -81,7 +86,16 @@ impl GLTask {
 
     /// Passthru method to update the texture
     pub fn update_texture(&mut self, data: &[u8], rect: &Rectangle, format: PixelFormat, window: &mut Window) {
-
+        window.update_texture(&self.texture_id, data, rect, format);
     }
+
+    /// Set the closure function that is used to convert a vertex into a vector of u32 values
+    /// that match the data expected by the GL vertex shader
+    pub fn set_serializer<C>(&mut self, cb: C)
+    where C: Fn(Vertex) -> Vec<f32> + 'static,
+    {
+        self.serializer = Box::new(cb);
+    }
+
 
 }
