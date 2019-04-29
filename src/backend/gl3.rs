@@ -69,7 +69,7 @@ const NULL_TEXTURE_ID: u32 = 0;
 
 fn format_gl(format: PixelFormat) -> u32 {
     match format {
-        PixelFormat::Alpha => gl::ALPHA,
+        PixelFormat::Alpha => gl::RED,
         PixelFormat::RGB => gl::RGB,
         PixelFormat::RGBA => gl::RGBA
     }
@@ -280,6 +280,8 @@ impl Backend for GL3Backend {
     unsafe fn create_texture(&mut self, data: &[u8], width: u32, height: u32, format: PixelFormat) -> Result<ImageData> {
         let data = if data.len() == 0 { nullptr() } else { data.as_ptr() as *const c_void };
         let format = format_gl(format);
+        gl::PixelStorei(gl::UNPACK_ALIGNMENT, 1);
+
         let id = {
             let mut texture = 0;
             gl::GenTextures(1, &mut texture as *mut u32);
@@ -288,21 +290,24 @@ impl Backend for GL3Backend {
         eprintln!("Created texture id={} width x={:?} y={:?}", id, width, height);
         // self.texture = id;
         gl::ActiveTexture(gl::TEXTURE0 + id as u32);
-        gl::BindTexture(gl::TEXTURE_2D, id);
+        // gl::BindTexture(gl::TEXTURE_2D, id);
         gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::CLAMP_TO_EDGE as i32);
         gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::CLAMP_TO_EDGE as i32);
         gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::NEAREST as i32);
         gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::NEAREST as i32);
         gl::TexImage2D(gl::TEXTURE_2D, 0, format as i32, width as i32,
                         height as i32, 0, format, gl::UNSIGNED_BYTE, data);
-        gl::GenerateMipmap(gl::TEXTURE_2D);
+        // gl::GenerateMipmap(gl::TEXTURE_2D);
         Ok(ImageData { id, width, height })
     }
 
     unsafe fn update_texture(&mut self, texture_id: &u32, data: &[u8], rect: &Rectangle, format: PixelFormat) {
+        eprintln!("Updating texture_id={:?} rect={:?}", texture_id, rect);
         let format = format_gl(format);
+        let id = *texture_id as u32;
         // https://developer.mozilla.org/en-US/docs/Web/API/WebGLRenderingContext/texSubImage2D
-        gl::BindTexture(gl::TEXTURE_2D, *texture_id);
+        gl::ActiveTexture(gl::TEXTURE0 + id);
+        gl::BindTexture(gl::TEXTURE_2D, id);
         gl::TexSubImage2D(
             gl::TEXTURE_2D,
             0,
@@ -449,6 +454,7 @@ impl Backend for GL3Backend {
         gl::AttachShader(program, vs);
         gl::AttachShader(program, fs);
         gl::LinkProgram(program);
+        gl::UseProgram(program);
         // Get the link status
         let mut status = GLint::from(gl::FALSE);
         gl::GetProgramiv(program, gl::LINK_STATUS, &mut status);
@@ -499,8 +505,13 @@ impl Backend for GL3Backend {
             offset += size * float_size;
         }
         let raw = CString::new(out_color).expect("No interior null bytes in shader").into_raw();
+        eprintln!("configure_fields program_id={:?} color key={:?}", program_id, out_color);
         gl::BindFragDataLocation(program_id, 0, raw as *mut i8);
         CString::from_raw(raw);
+
+        let raw = CString::new("tex").expect("No tex").into_raw();
+        let location = gl::GetUniformLocation(program_id, raw as *const i8);
+        eprintln!("texture location={:?} for program_id={:?}", location, program_id);
         Ok(())
     }
 
@@ -532,15 +543,16 @@ impl Backend for GL3Backend {
         }
         gl::BufferSubData(gl::ELEMENT_ARRAY_BUFFER, 0, index_length as isize, index_data);
 
-        gl::ActiveTexture(gl::TEXTURE0);
+        gl::ActiveTexture(gl::TEXTURE1);
             // if self.texture != 0 {
-            //     gl::BindTexture(gl::TEXTURE_2D, self.texture);
+        // gl::BindTexture(gl::TEXTURE_2D, 1);
+        // let location = gl::GetUniformLocation(self.shader, tex_string as *const i8);
             //     gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, self.texture_mode as i32);
             //     gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, self.texture_mode as i32);
             // }
-            // gl::Uniform1i(self.texture_location, 0);
+            gl::Uniform1i(self.texture_location, 0);
             // Draw the triangles
-        gl::DrawElements(gl::TRIANGLES, self.indices.len() as i32, gl::UNSIGNED_INT, index_data);
+        gl::DrawElements(gl::TRIANGLES, self.indices.len() as i32, gl::UNSIGNED_INT, nullptr());
         self.vertices.clear();
         self.indices.clear();
     }
