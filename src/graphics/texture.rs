@@ -11,38 +11,44 @@ use crate::{
 /// This modularity allows Quicksilver to handle multiple GL processing jobs separately with
 /// different shader programs and expected outputs.
 // #[derive(Clone)]
-pub struct GLTexture {
-    /// List of name and field width values
-    pub fields: Vec<(String, u32)>,
-    /// Function that serializes a Vertex struct into the vec of f32 vals that the GPU shader expects.
+pub struct Texture {
+    /// The ImageData.id value returned by glGenTextures in backend.create_texture.
     pub texture_id: u32,
     /// The id returned by glCreateProgram in backend.link_program.
     pub program_id: u32,
     /// The id returned when glCreateShader in backend.compile_shader for the vertex shader
-    vertex_id: u32,
+    pub vertex_id: u32,
     /// The id returned when glCreateShader in backend.compile_shader for the fragment shader
-    fragment_id: u32,
+    pub fragment_id: u32,
+    /// List of name and field width values
+    pub fields: Vec<(String, u32)>,
+    /// Identifies the name of the fragment shader variable for the output color
+    pub out_color: String,
+    /// Identifies the name of the sampler2D variable in the fragment shader
+    pub sampler: String,
+    /// Function that serializes a Vertex struct into the vec of f32 vals that the GPU shader expects.
     pub serializer: Box<dyn Fn(Vertex) -> Vec<f32> + 'static>,
-    /// The ImageData.id value returned by glGenTextures in backend.create_texture.
 }
 
-impl Default for GLTexture {
+impl Default for Texture {
     fn default() -> Self {
         let default = |_vertex| -> Vec<f32> {
             Vec::new()
         };
-        GLTexture {
-            fields: Vec::new(),
+        Texture {
             texture_id: 0,
             program_id: 0,
             vertex_id: 0,
             fragment_id: 0,
+            fields: Vec::new(),
+            out_color: String::default(),
+            sampler: String::default(),
             serializer: Box::new(default),
         }
     }
 }
 
-impl GLTexture {
+impl Texture {
 
     /// Initialize both shaders using the provided strings which contain OpenGL/WebGL code
     pub fn init_shaders(mut self, vertex_shader: &str, fragment_shader: &str, window: &mut Window) -> Self {
@@ -63,8 +69,10 @@ impl GLTexture {
         self
     }
     /// Set the fields that match the shader program inputs
-    pub fn with_fields(mut self, fields: &[(&str, u32)], out_color: &str, window: &mut Window) -> Self {
+    pub fn with_fields(mut self, fields: &[(&str, u32)], out_color: &str, sampler: &str, window: &mut Window) -> Self {
         self.fields = fields.iter().map(|(s, n)| (s.to_string(), n.clone())).collect();
+        self.out_color = out_color.to_string();
+        self.sampler = sampler.to_string();
         self
     }
 
@@ -77,36 +85,23 @@ impl GLTexture {
     }
 }
 
-// #[cfg(not(target_arch="wasm32"))]
-// impl Drop for GLTexture {
-//     fn drop(&mut self) {
-//         unsafe {
-//             gl::DeleteProgram(self.program_id);
-//             gl::DeleteShader(self.fragment_id);
-//             gl::DeleteShader(self.vertex_id);
-//         }
-//     }
-// }
-// #[cfg(target_arch="wasm32")]
-// impl Drop for GLTexture {
-//     fn drop(&mut self) {
-//         self.gl_ctx.delete_program(Some(&self.program_id));
-//         self.gl_ctx.delete_shader(Some(&self.fragment_id));
-//         self.gl_ctx.delete_shader(Some(&self.vertex_id));
-//     }
-// }
-
+/// A temporary object holding the vertices and triangles to be drawn by the backend.
+/// The Window instance has a draw_tasks vector and each task is processed during the draw
+/// and flush stages
 pub struct DrawTask {
+    /// The id value matching the Texture registered in backend.textures_map
+    pub texture_id: u32,
     /// All the vertices in the task
     pub vertices: Vec<Vertex>,
     /// All the triangles in the task
     pub triangles: Vec<GpuTriangle>,
-
 }
 
 impl DrawTask {
-    pub fn new() -> Self {
+    /// Create DrawTask with the texture_id matching the Texture saved in backend.textures_map
+    pub fn new(id: u32) -> Self {
         DrawTask {
+            texture_id: id,
             vertices: Vec::new(),
             triangles: Vec::new(),
         }

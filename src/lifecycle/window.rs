@@ -2,7 +2,7 @@ use crate::{
     Result,
     backend::{Backend, BackendImpl, ImageData, instance, set_instance},
     geom::{Rectangle, Scalar, Transform, Vector},
-    graphics::{Background, BlendMode, Color, Drawable, GLTexture, Mesh, PixelFormat, ResizeStrategy, View},
+    graphics::{Background, BlendMode, Color, Drawable, DrawTask, Texture, Mesh, PixelFormat, ResizeStrategy, View},
     input::{ButtonState, Gamepad, Keyboard, Mouse, MouseCursor},
     lifecycle::{Event, Settings},
 };
@@ -49,12 +49,12 @@ pub struct Window {
     max_updates: u32,
     draw_rate: f64,
     mesh: Mesh,
-    tasks: Vec<GLTexture>,
     frame_count: f64,
     fps: f64,
     last_framerate: f64,
     running: bool,
     fullscreen: bool,
+    draw_tasks: Vec<DrawTask>,
 }
 
 impl Window {
@@ -81,12 +81,12 @@ impl Window {
             max_updates: settings.max_updates,
             draw_rate: settings.draw_rate,
             mesh: Mesh::new(),
-            tasks: Vec::new(),
             frame_count: 0.0,
             fps: 0.0,
             last_framerate: 0.0,
             running: true,
-            fullscreen: false
+            fullscreen: false,
+            draw_tasks: Vec::new(),
         };
         window.set_cursor(if settings.show_cursor {
             MouseCursor::Default
@@ -351,7 +351,7 @@ impl Window {
             self.backend().draw(self.mesh.vertices.as_slice(), self.mesh.triangles.as_slice())?;
         }
         self.mesh.clear();
-        self.tasks.clear();
+        self.draw_tasks.clear();
         Ok(())
     }
 
@@ -536,8 +536,14 @@ impl Window {
         unsafe { self.backend().update_texture(texture_id, data, rect, format) }
     }
 
+    /// Passthru method to save the texture in the GL backend, which can lookup the
+    /// related texture using the texture_id
+    pub fn register_texture(&mut self, texture_id: u32, texture: Texture) {
+        self.backend().register_texture(texture_id, texture);
+    }
+
     /// Experimental method to make GL rendering more modular
-    pub fn add_task(&mut self, task: GLTexture) {
-        self.tasks.push(task);
+    pub fn add_task(&mut self, task: DrawTask) {
+        self.draw_tasks.push(task);
     }
 }

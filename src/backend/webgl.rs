@@ -6,7 +6,10 @@ use crate::{
     graphics::{BlendMode, Color, GLTask, GpuTriangle, Image, ImageScaleStrategy, PixelFormat, Surface, Vertex},
     input::MouseCursor,
 };
-use std::mem::size_of;
+use std::{
+    collections::HashMap,
+    mem::size_of,
+};
 use stdweb::{
     web::{
         html_element::CanvasElement,
@@ -42,6 +45,7 @@ pub struct WebGLBackend {
     initial_width: u32,
     initial_height: u32,
     textures: Vec<Option<WebGLTexture>>,
+    textures_map: HashMap<u32, Texture>
 }
 
 const DEFAULT_VERTEX_SHADER: &str = r#"attribute vec2 position;
@@ -141,6 +145,7 @@ impl Backend for WebGLBackend {
             initial_width,
             initial_height,
             textures: Vec::new(),
+            textures_map: HashMap::new(),
         })
     }
 
@@ -253,6 +258,7 @@ impl Backend for WebGLBackend {
     }
 
     unsafe fn create_texture(&mut self, data: &[u8], width: u32, height: u32, format: PixelFormat) -> Result<ImageData> {
+        // FIXME: This numbering scheme won't work for new Texture and DrawTask scheme
         let id = self.textures.len() as u32;
         let format = match format {
             PixelFormat::RGB => gl::RGB as i64,
@@ -404,13 +410,22 @@ impl Backend for WebGLBackend {
             self.gl_ctx.vertex_attrib_pointer(attr, *float_count as i32, gl::FLOAT, false, stride_distance, 2 * size_of::<f32>() as i64);
             offset += float_count * float_size;
         }
-
         Ok(())
+    }
+
+    fn register_texture(&mut self, texture_id: u32, texture: Texture) {
+        self.textures_map.insert(texture_id, texture);
     }
 }
 
 impl Drop for WebGLBackend {
     fn drop(&mut self) {
+        for (id, texture) in &self.textures_map {
+            self.gl_ctx.delete_texture(id);
+            self.gl_ctx.delete_program(texture.shader_id);
+            self.gl_ctx.delete_shader(texture.fragment_id);
+            self.gl_ctx.delete_shader(texture.vertex_id);
+        }
         self.gl_ctx.delete_program(Some(&self.shader));
         self.gl_ctx.delete_shader(Some(&self.fragment));
         self.gl_ctx.delete_shader(Some(&self.vertex));

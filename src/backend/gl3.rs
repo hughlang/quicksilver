@@ -3,12 +3,13 @@ use crate::{
     backend::{Backend, ImageData, SurfaceData, VERTEX_SIZE},
     error::QuicksilverError,
     geom::{Rectangle, Vector},
-    graphics::{BlendMode, Color, GLTexture, GpuTriangle, Image, ImageScaleStrategy, PixelFormat, Surface, Vertex},
+    graphics::{BlendMode, Color, Texture, GpuTriangle, Image, ImageScaleStrategy, PixelFormat, Surface, Vertex},
     input::MouseCursor
 };
 use gl::types::*;
 use glutin::{WindowedContext, dpi::LogicalSize};
 use std::{
+    collections::HashMap,
     ffi::CString,
     mem::size_of,
     os::raw::c_void,
@@ -30,7 +31,8 @@ pub struct GL3Backend {
     ebo: u32,
     vao: u32,
     texture_location: i32,
-    texture_mode: u32
+    texture_mode: u32,
+    textures_map: HashMap<u32, Texture>,
 }
 
 const DEFAULT_VERTEX_SHADER: &str = r#"#version 150
@@ -75,7 +77,7 @@ fn format_gl(format: PixelFormat) -> u32 {
 
 impl GL3Backend {
 
-    fn draw_task(&mut self, task: &mut GLTexture) {
+    pub fn draw_task(&mut self, task: &mut Texture) {
         // let cb = task.serializer.borrow_mut();
         let mut cb = &task.serializer;
 
@@ -144,7 +146,8 @@ impl Backend for GL3Backend {
             shader, fragment, vertex,
             vbo, ebo, vao,
             texture_location: 0,
-            texture_mode
+            texture_mode,
+            textures_map: HashMap::new()
         })
     }
 
@@ -491,11 +494,21 @@ impl Backend for GL3Backend {
         CString::from_raw(raw);
         Ok(())
     }
+
+    fn register_texture(&mut self, texture_id: u32, texture: Texture) {
+        self.textures_map.insert(texture_id, texture);
+    }
 }
 
 impl Drop for GL3Backend {
     fn drop(&mut self) {
         unsafe {
+            for (id, texture) in &self.textures_map {
+                gl::DeleteTextures(1, id as *const u32);
+                gl::DeleteProgram(texture.program_id);
+                gl::DeleteShader(texture.fragment_id);
+                gl::DeleteShader(texture.vertex_id);
+            }
             gl::DeleteProgram(self.shader);
             gl::DeleteShader(self.fragment);
             gl::DeleteShader(self.vertex);
