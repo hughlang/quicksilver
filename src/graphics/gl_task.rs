@@ -22,6 +22,8 @@ pub struct GLTask {
     pub triangles: Vec<GpuTriangle>,
     /// List of name and field width values
     pub fields: Vec<(String, u32)>,
+    /// Function that serializes a Vertex struct into the vec of f32 vals that the GPU shader expects.
+    pub serializer: Box<dyn Fn(&Vertex) -> Vec<f32> + 'static>,
     /// The id value returned when creating a texture
     pub texture_id: u32,
     /// The texture location
@@ -29,7 +31,6 @@ pub struct GLTask {
     program_id: u32,
     fragment_shader_id: u32,
     vertex_shader_id: u32,
-    serializer: Box<dyn Fn(Vertex) -> Vec<f32> + 'static>,
 }
 
 impl Default for GLTask {
@@ -41,12 +42,12 @@ impl Default for GLTask {
             vertices: Vec::new(),
             triangles: Vec::new(),
             fields: Vec::new(),
+            serializer: Box::new(default),
             texture_id: 0,
             location_id: 0,
             program_id: 0,
             fragment_shader_id: 0,
             vertex_shader_id: 0,
-            serializer: Box::new(default),
         }
     }
 }
@@ -78,24 +79,25 @@ impl GLTask {
     }
 
     /// Method to create a texture in the GPU with specified width, height, and pixel_format
-    pub fn create_texture(&mut self, width: u32, height: u32, pixel_format: PixelFormat, window: &mut Window) -> Result<u32> {
-        let data = window.create_texture(&[], width, height, pixel_format).unwrap();
-        self.texture_id = data.id;
-        Ok(self.texture_id)
-    }
+    // pub fn create_texture(&mut self, width: u32, height: u32, pixel_format: PixelFormat, window: &mut Window) -> Result<u32> {
+    //     let data = window.create_texture(&[], width, height, pixel_format).unwrap();
+    //     self.texture_id = data.id;
+    //     Ok(self.texture_id)
+    // }
 
     /// Passthru method to update the texture
-    pub fn update_texture(&mut self, data: &[u8], rect: &Rectangle, format: PixelFormat, window: &mut Window) {
-        window.update_texture(&self.texture_id, data, rect, format);
-    }
+    // pub fn update_texture(&mut self, data: &[u8], rect: &Rectangle, format: PixelFormat, window: &mut Window) {
+    //     window.update_texture(&self.texture_id, data, rect, format);
+    // }
 
     /// Set the closure function that is used to convert a vertex into a vector of u32 values
     /// that match the data expected by the GL vertex shader
     pub fn set_serializer<C>(&mut self, cb: C)
-    where C: Fn(Vertex) -> Vec<f32> + 'static,
+    where C: Fn(&Vertex) -> Vec<f32> + 'static,
     {
         self.serializer = Box::new(cb);
     }
+
 
 
 }

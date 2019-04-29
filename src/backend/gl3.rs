@@ -76,7 +76,14 @@ fn format_gl(format: PixelFormat) -> u32 {
 
 impl GL3Backend {
 
-    fn draw_task(&mut self, task: &GLTask) {
+    fn draw_task(&mut self, task: &mut GLTask) {
+        // let cb = task.serializer.borrow_mut();
+        let mut cb = &task.serializer;
+
+        for vertex in &task.vertices {
+            let vertices = (&mut cb)(vertex);
+            eprintln!("count={:?} data={:?}", vertices.len(), vertices);
+        }
 
     }
 }
