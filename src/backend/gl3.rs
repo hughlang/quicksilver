@@ -3,7 +3,7 @@ use crate::{
     backend::{Backend, ImageData, SurfaceData, VERTEX_SIZE},
     error::QuicksilverError,
     geom::{Rectangle, Vector},
-    graphics::{BlendMode, Color, GLTask, GpuTriangle, Image, ImageScaleStrategy, PixelFormat, Surface, Vertex},
+    graphics::{BlendMode, Color, GLTexture, GpuTriangle, Image, ImageScaleStrategy, PixelFormat, Surface, Vertex},
     input::MouseCursor
 };
 use gl::types::*;
@@ -18,7 +18,6 @@ use std::{
 
 pub struct GL3Backend {
     context: WindowedContext,
-    tasks: Vec<GLTask>,
     texture: u32,
     vertices: Vec<f32>,
     indices: Vec<u32>,
@@ -76,14 +75,14 @@ fn format_gl(format: PixelFormat) -> u32 {
 
 impl GL3Backend {
 
-    fn draw_task(&mut self, task: &mut GLTask) {
+    fn draw_task(&mut self, task: &mut GLTexture) {
         // let cb = task.serializer.borrow_mut();
         let mut cb = &task.serializer;
 
-        for vertex in &task.vertices {
-            let vertices = (&mut cb)(*vertex);
-            eprintln!("count={:?} data={:?}", vertices.len(), vertices);
-        }
+        // for vertex in &task.vertices {
+        //     let vertices = (&mut cb)(*vertex);
+        //     eprintln!("count={:?} data={:?}", vertices.len(), vertices);
+        // }
 
     }
 }
@@ -137,7 +136,6 @@ impl Backend for GL3Backend {
         gl::UseProgram(shader);
         Ok(GL3Backend {
             context,
-            tasks: Vec::new(),
             texture: NULL_TEXTURE_ID,
             vertices: Vec::with_capacity(1024),
             indices: Vec::with_capacity(1024),
@@ -148,10 +146,6 @@ impl Backend for GL3Backend {
             texture_location: 0,
             texture_mode
         })
-    }
-
-    fn add_task(&mut self, task: GLTask) {
-        self.tasks.push(task);
     }
 
     unsafe fn clear(&mut self, col: Color) {
@@ -507,11 +501,6 @@ impl Drop for GL3Backend {
             gl::DeleteShader(self.vertex);
             gl::DeleteBuffers(2, &[self.vbo, self.ebo] as *const u32);
             gl::DeleteVertexArrays(1, &self.vao as *const u32);
-
-            // TODO: delete task refs
-            for task in &self.tasks {
-
-            }
         }
     }
 }

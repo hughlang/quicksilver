@@ -7,7 +7,7 @@ mod blend_mode;
 mod color;
 mod drawable;
 #[cfg(feature="fonts")] mod font;
-mod gl_task;
+mod texture;
 #[cfg(feature="lyon")] mod lyon;
 mod image;
 mod image_scale_strategy;
@@ -24,7 +24,7 @@ pub use self::{
     blend_mode::BlendMode,
     color::Color,
     drawable::{Background, Drawable},
-    gl_task::GLTask,
+    texture::GLTexture,
     image::{Image, ImageError, PixelFormat},
     image_scale_strategy::ImageScaleStrategy,
     mesh::Mesh,

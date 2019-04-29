@@ -2,57 +2,47 @@
 ///
 ///
 use crate::{
-    Result,
     backend::Backend,
-    geom::{Rectangle, Vector},
-    graphics::{GpuTriangle, PixelFormat, Vertex},
+    graphics::{GpuTriangle, Vertex},
     lifecycle::Window,
 };
-
-// use gl::types::*;
 
 /// This is a wrapper object that holds the info necessary for executing a set of GL instructions.
 /// This modularity allows Quicksilver to handle multiple GL processing jobs separately with
 /// different shader programs and expected outputs.
 // #[derive(Clone)]
-pub struct GLTask {
-    /// All the vertices in the task
-    pub vertices: Vec<Vertex>,
-    /// All the triangles in the task
-    pub triangles: Vec<GpuTriangle>,
+pub struct GLTexture {
     /// List of name and field width values
     pub fields: Vec<(String, u32)>,
     /// Function that serializes a Vertex struct into the vec of f32 vals that the GPU shader expects.
-    pub serializer: Box<dyn Fn(Vertex) -> Vec<f32> + 'static>,
-    /// The id value returned when creating a texture
     pub texture_id: u32,
-    /// The texture location
-    pub location_id: u32,
-    program_id: u32,
-    fragment_shader_id: u32,
-    vertex_shader_id: u32,
+    /// The id returned by glCreateProgram in backend.link_program.
+    pub program_id: u32,
+    /// The id returned when glCreateShader in backend.compile_shader for the vertex shader
+    vertex_id: u32,
+    /// The id returned when glCreateShader in backend.compile_shader for the fragment shader
+    fragment_id: u32,
+    pub serializer: Box<dyn Fn(Vertex) -> Vec<f32> + 'static>,
+    /// The ImageData.id value returned by glGenTextures in backend.create_texture.
 }
 
-impl Default for GLTask {
+impl Default for GLTexture {
     fn default() -> Self {
         let default = |_vertex| -> Vec<f32> {
             Vec::new()
         };
-        GLTask {
-            vertices: Vec::new(),
-            triangles: Vec::new(),
+        GLTexture {
             fields: Vec::new(),
-            serializer: Box::new(default),
             texture_id: 0,
-            location_id: 0,
             program_id: 0,
-            fragment_shader_id: 0,
-            vertex_shader_id: 0,
+            vertex_id: 0,
+            fragment_id: 0,
+            serializer: Box::new(default),
         }
     }
 }
 
-impl GLTask {
+impl GLTexture {
 
     /// Initialize both shaders using the provided strings which contain OpenGL/WebGL code
     pub fn init_shaders(mut self, vertex_shader: &str, fragment_shader: &str, window: &mut Window) -> Self {
@@ -62,8 +52,8 @@ impl GLTask {
             if vs.is_ok() && fs.is_ok() {
                 let vs = vs.unwrap();
                 let fs = fs.unwrap();
-                self.vertex_shader_id = vs;
-                self.fragment_shader_id = fs;
+                self.vertex_id = vs;
+                self.fragment_id = fs;
                 let pid = window.backend().link_program(vs, fs);
                 if pid.is_ok() {
                     self.program_id = pid.unwrap();
@@ -78,18 +68,6 @@ impl GLTask {
         self
     }
 
-    /// Method to create a texture in the GPU with specified width, height, and pixel_format
-    // pub fn create_texture(&mut self, width: u32, height: u32, pixel_format: PixelFormat, window: &mut Window) -> Result<u32> {
-    //     let data = window.create_texture(&[], width, height, pixel_format).unwrap();
-    //     self.texture_id = data.id;
-    //     Ok(self.texture_id)
-    // }
-
-    /// Passthru method to update the texture
-    // pub fn update_texture(&mut self, data: &[u8], rect: &Rectangle, format: PixelFormat, window: &mut Window) {
-    //     window.update_texture(&self.texture_id, data, rect, format);
-    // }
-
     /// Set the closure function that is used to convert a vertex into a vector of u32 values
     /// that match the data expected by the GL vertex shader
     pub fn set_serializer<C>(&mut self, cb: C)
@@ -97,7 +75,40 @@ impl GLTask {
     {
         self.serializer = Box::new(cb);
     }
+}
 
+// #[cfg(not(target_arch="wasm32"))]
+// impl Drop for GLTexture {
+//     fn drop(&mut self) {
+//         unsafe {
+//             gl::DeleteProgram(self.program_id);
+//             gl::DeleteShader(self.fragment_id);
+//             gl::DeleteShader(self.vertex_id);
+//         }
+//     }
+// }
+// #[cfg(target_arch="wasm32")]
+// impl Drop for GLTexture {
+//     fn drop(&mut self) {
+//         self.gl_ctx.delete_program(Some(&self.program_id));
+//         self.gl_ctx.delete_shader(Some(&self.fragment_id));
+//         self.gl_ctx.delete_shader(Some(&self.vertex_id));
+//     }
+// }
 
+pub struct DrawTask {
+    /// All the vertices in the task
+    pub vertices: Vec<Vertex>,
+    /// All the triangles in the task
+    pub triangles: Vec<GpuTriangle>,
 
+}
+
+impl DrawTask {
+    pub fn new() -> Self {
+        DrawTask {
+            vertices: Vec::new(),
+            triangles: Vec::new(),
+        }
+    }
 }

@@ -144,10 +144,6 @@ impl Backend for WebGLBackend {
         })
     }
 
-    fn add_task(&mut self, task: GLTask) {
-
-    }
-
     unsafe fn clear(&mut self, col: Color) {
         self.gl_ctx.clear_color(col.r, col.g, col.b, col.a);
         self.gl_ctx.clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
@@ -422,4 +418,3 @@ impl Drop for WebGLBackend {
         self.gl_ctx.delete_buffer(Some(&self.ebo));
     }
 }
-

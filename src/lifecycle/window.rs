@@ -2,7 +2,7 @@ use crate::{
     Result,
     backend::{Backend, BackendImpl, ImageData, instance, set_instance},
     geom::{Rectangle, Scalar, Transform, Vector},
-    graphics::{Background, BlendMode, Color, Drawable, GLTask, Mesh, PixelFormat, ResizeStrategy, View},
+    graphics::{Background, BlendMode, Color, Drawable, GLTexture, Mesh, PixelFormat, ResizeStrategy, View},
     input::{ButtonState, Gamepad, Keyboard, Mouse, MouseCursor},
     lifecycle::{Event, Settings},
 };
@@ -49,7 +49,7 @@ pub struct Window {
     max_updates: u32,
     draw_rate: f64,
     mesh: Mesh,
-    tasks: Vec<GLTask>,
+    tasks: Vec<GLTexture>,
     frame_count: f64,
     fps: f64,
     last_framerate: f64,
@@ -537,7 +537,7 @@ impl Window {
     }
 
     /// Experimental method to make GL rendering more modular
-    pub fn add_task(&mut self, task: GLTask) {
+    pub fn add_task(&mut self, task: GLTexture) {
         self.tasks.push(task);
     }
 }
