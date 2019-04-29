@@ -23,7 +23,7 @@ pub struct GLTask {
     /// List of name and field width values
     pub fields: Vec<(String, u32)>,
     /// Function that serializes a Vertex struct into the vec of f32 vals that the GPU shader expects.
-    pub serializer: Box<dyn Fn(&Vertex) -> Vec<f32> + 'static>,
+    pub serializer: Box<dyn Fn(Vertex) -> Vec<f32> + 'static>,
     /// The id value returned when creating a texture
     pub texture_id: u32,
     /// The texture location
@@ -93,7 +93,7 @@ impl GLTask {
     /// Set the closure function that is used to convert a vertex into a vector of u32 values
     /// that match the data expected by the GL vertex shader
     pub fn set_serializer<C>(&mut self, cb: C)
-    where C: Fn(&Vertex) -> Vec<f32> + 'static,
+    where C: Fn(Vertex) -> Vec<f32> + 'static,
     {
         self.serializer = Box::new(cb);
     }

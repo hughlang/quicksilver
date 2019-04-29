@@ -81,7 +81,7 @@ impl GL3Backend {
         let mut cb = &task.serializer;
 
         for vertex in &task.vertices {
-            let vertices = (&mut cb)(vertex);
+            let vertices = (&mut cb)(*vertex);
             eprintln!("count={:?} data={:?}", vertices.len(), vertices);
         }
 
