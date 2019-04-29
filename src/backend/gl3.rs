@@ -3,7 +3,7 @@ use crate::{
     backend::{Backend, ImageData, SurfaceData, VERTEX_SIZE},
     error::QuicksilverError,
     geom::{Rectangle, Vector},
-    graphics::{BlendMode, Color, Texture, GpuTriangle, Image, ImageScaleStrategy, PixelFormat, Surface, Vertex},
+    graphics::{BlendMode, Color, DrawTask, GpuTriangle, Image, ImageScaleStrategy, PixelFormat, Surface, Texture, Vertex},
     input::MouseCursor
 };
 use gl::types::*;
@@ -77,15 +77,23 @@ fn format_gl(format: PixelFormat) -> u32 {
 
 impl GL3Backend {
 
-    pub fn draw_task(&mut self, task: &mut Texture) {
-        // let cb = task.serializer.borrow_mut();
-        let mut cb = &task.serializer;
-
-        // for vertex in &task.vertices {
-        //     let vertices = (&mut cb)(*vertex);
-        //     eprintln!("count={:?} data={:?}", vertices.len(), vertices);
-        // }
-
+    fn add_draw_task(&mut self, task: &DrawTask) -> Result<()> {
+        if self.textures_map.get(&task.texture_id).is_none() {
+            return Err(QuicksilverError::ContextError(format!("Texture lookup failed for id={}", task.texture_id)));
+        }
+        // eprintln!("Add draw task={:?} y={:?}", task.texture_id, 0);
+        if let Some(texture) = self.textures_map.get(&task.texture_id) {
+            let mut cb = &texture.serializer;
+            for vertex in &task.vertices {
+                let mut vertices = (&mut cb)(*vertex);
+                // eprintln!("count={:?} data={:?}", vertices.len(), vertices);
+                self.vertices.append(&mut vertices);
+            }
+            for triangle in task.triangles.iter() {
+                self.indices.extend(triangle.indices.iter());
+            }
+        }
+        Ok(())
     }
 }
 
@@ -278,7 +286,8 @@ impl Backend for GL3Backend {
             texture
         };
         eprintln!("Created texture id={} width x={:?} y={:?}", id, width, height);
-        self.texture = id;
+        // self.texture = id;
+        gl::ActiveTexture(gl::TEXTURE0 + id as u32);
         gl::BindTexture(gl::TEXTURE_2D, id);
         gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::CLAMP_TO_EDGE as i32);
         gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::CLAMP_TO_EDGE as i32);
@@ -461,11 +470,11 @@ impl Backend for GL3Backend {
         Ok(program)
     }
 
-    unsafe fn configure_fields(&self, program_id: u32, fields: &Vec<(String, u32)>, out_color: String) -> Result<()> {
+    unsafe fn configure_fields(&self, program_id: u32, fields: &Vec<(String, u32)>, out_color: &str) -> Result<()> {
         let float_size = size_of::<f32>() as u32;
         let mut offset = 0;
 
-        let vert_size = fields.iter().fold(0, |acc, x| acc + x.1);
+        // let vert_size = fields.iter().fold(0, |acc, x| acc + x.1);
         let stride_distance = (VERTEX_SIZE * size_of::<f32>()) as i32;
 
         for (v_field, float_count) in fields {
@@ -497,6 +506,43 @@ impl Backend for GL3Backend {
 
     fn register_texture(&mut self, texture_id: u32, texture: Texture) {
         self.textures_map.insert(texture_id, texture);
+    }
+
+    unsafe fn draw_tasks(&mut self, tasks: &Vec<DrawTask>) {
+        for task in tasks {
+            let _ = self.add_draw_task(&task);
+        }
+        // Check vertices size and resize array buffer if needed
+        let vertex_length = size_of::<f32>() * self.vertices.len();
+        if vertex_length > self.vertex_length {
+            self.vertex_length = vertex_length * 2;
+            gl::BufferData(gl::ARRAY_BUFFER, self.vertex_length as isize, nullptr(), gl::STREAM_DRAW);
+        }
+
+        let vertex_data = self.vertices.as_ptr() as *const c_void;
+        gl::BufferSubData(gl::ARRAY_BUFFER, 0, vertex_length as isize, vertex_data);
+
+        // Check indices size and resize element array buffer if needed
+        let index_length = size_of::<u32>() * self.indices.len();
+        let index_data = self.indices.as_ptr() as *const c_void;
+        if index_length > self.index_length {
+            eprintln!("index_length={:?} was={:?}", index_length, self.index_length);
+            self.index_length = index_length * 2;
+            gl::BufferData(gl::ELEMENT_ARRAY_BUFFER, self.index_length as isize, nullptr(), gl::STREAM_DRAW);
+        }
+        gl::BufferSubData(gl::ELEMENT_ARRAY_BUFFER, 0, index_length as isize, index_data);
+
+        gl::ActiveTexture(gl::TEXTURE0);
+            // if self.texture != 0 {
+            //     gl::BindTexture(gl::TEXTURE_2D, self.texture);
+            //     gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, self.texture_mode as i32);
+            //     gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, self.texture_mode as i32);
+            // }
+            // gl::Uniform1i(self.texture_location, 0);
+            // Draw the triangles
+        gl::DrawElements(gl::TRIANGLES, self.indices.len() as i32, gl::UNSIGNED_INT, index_data);
+        self.vertices.clear();
+        self.indices.clear();
     }
 }
 

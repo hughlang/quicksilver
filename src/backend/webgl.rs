@@ -3,7 +3,7 @@ use crate::{
     backend::{Backend, ImageData, SurfaceData, VERTEX_SIZE},
     geom::{Rectangle, Vector},
     error::QuicksilverError,
-    graphics::{BlendMode, Color, GLTask, GpuTriangle, Image, ImageScaleStrategy, PixelFormat, Surface, Vertex},
+    graphics::{BlendMode, Color, DrawTask, Texture, GpuTriangle, Image, ImageScaleStrategy, PixelFormat, Surface, Vertex},
     input::MouseCursor,
 };
 use std::{
@@ -92,7 +92,12 @@ fn try_opt<T>(opt: Option<T>, operation: &str) -> Result<T> {
 
 impl WebGLBackend {
 
+    fn draw_tasks(&self) {
+        eprintln!("shader={:?}", self.shader);
+        eprintln!("texture={:?}", self.texture);
+        eprintln!("fragment={:?}", self.fragment);
 
+    }
 }
 
 impl Backend for WebGLBackend {
@@ -382,35 +387,45 @@ impl Backend for WebGLBackend {
         self.canvas.set_height(size.y as u32);
     }
 
+    // See: https://github.com/rustwasm/wasm-bindgen/blob/103da2269229141d871ffa0964707058642d3807/examples/webgl/src/lib.rs#L68
     unsafe fn compile_shader(&self, src: &str, stype: u32) -> Result<u32> {
-        let id = try_opt(gl_ctx.create_shader(stype), "Compile shader")?;
-        gl_ctx.shader_source(&id, src);
-        gl_ctx.compile_shader(&id);
+        let id = try_opt(self.gl_ctx.create_shader(stype), "Compile shader")?;
+        self.gl_ctx.shader_source(&id, src);
+        self.gl_ctx.compile_shader(&id);
+        let text = format!("{:?}", id);
+        let id = text.parse::<u32>().unwrap();
         Ok(id)
     }
 
+    // See: https://github.com/rustwasm/wasm-bindgen/blob/103da2269229141d871ffa0964707058642d3807/examples/webgl/src/lib.rs#L92
     unsafe fn link_program(&self, vs: u32, fs: u32) -> Result<u32> {
-        let shader = try_opt(gl_ctx.create_program(), "Create shader program")?;
-        gl_ctx.attach_shader(&shader, &vertex);
-        gl_ctx.attach_shader(&shader, &fragment);
-        gl_ctx.link_program(&shader);
-        gl_ctx.use_program(Some(&shader));
-        Ok(shader)
+        let program = try_opt(self.gl_ctx.create_program(), "Create shader program")?;
+        self.gl_ctx.attach_shader(&program, &vs);
+        self.gl_ctx.attach_shader(&program, &fs);
+        self.gl_ctx.link_program(&program);
+        self.gl_ctx.use_program(Some(&program));
+        let text = format!("{:?}", program);
+        let id = text.parse::<u32>().unwrap();
+        Ok(id)
     }
 
-    unsafe fn configure_fields(&self, program_id: u32, fields: &Vec<(String, u32)>, out_color: String) -> Result<()> {
+    unsafe fn configure_fields(&self, program_id: u32, fields: &Vec<(String, u32)>, out_color: &str) -> Result<()> {
         let float_size = size_of::<f32>() as i64;
         let mut offset = 0;
         let stride_distance = (VERTEX_SIZE * size_of::<f32>()) as i32;
 
         for (v_field, float_count) in fields {
 
-            let attr = self.gl_ctx.get_attrib_location(&program_id, *v_field) as u32;
+            let attr = self.gl_ctx.get_attrib_location(&program_id, &*v_field) as u32;
             self.gl_ctx.enable_vertex_attrib_array(attr);
             self.gl_ctx.vertex_attrib_pointer(attr, *float_count as i32, gl::FLOAT, false, stride_distance, 2 * size_of::<f32>() as i64);
             offset += float_count * float_size;
         }
         Ok(())
+    }
+
+    unsafe fn draw_tasks(&mut self, tasks: &Vec<DrawTask>) {
+
     }
 
     fn register_texture(&mut self, texture_id: u32, texture: Texture) {

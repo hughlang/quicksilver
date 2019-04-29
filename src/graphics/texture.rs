@@ -7,6 +7,11 @@ use crate::{
     lifecycle::Window,
 };
 
+#[cfg(not(target_arch="wasm32"))]
+use gl;
+#[cfg(target_arch="wasm32")]
+use webgl_stdweb::WebGL2RenderingContext as gl;
+
 /// This is a wrapper object that holds the info necessary for executing a set of GL instructions.
 /// This modularity allows Quicksilver to handle multiple GL processing jobs separately with
 /// different shader programs and expected outputs.
@@ -73,6 +78,12 @@ impl Texture {
         self.fields = fields.iter().map(|(s, n)| (s.to_string(), n.clone())).collect();
         self.out_color = out_color.to_string();
         self.sampler = sampler.to_string();
+        unsafe{
+            let result = window.backend().configure_fields(self.program_id, &self.fields, out_color);
+            if result.is_err() {
+                eprintln!("ERROR={:?} y={:?}", result, 0);
+            }
+        }
         self
     }
 
@@ -88,6 +99,7 @@ impl Texture {
 /// A temporary object holding the vertices and triangles to be drawn by the backend.
 /// The Window instance has a draw_tasks vector and each task is processed during the draw
 /// and flush stages
+#[derive(Clone)]
 pub struct DrawTask {
     /// The id value matching the Texture registered in backend.textures_map
     pub texture_id: u32,

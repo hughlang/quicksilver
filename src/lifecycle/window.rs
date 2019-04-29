@@ -343,12 +343,19 @@ impl Window {
     ///
     /// Note that calling this can be an expensive operation
     pub fn flush(&mut self) -> Result<()> {
-        self.mesh.triangles.sort();
-        for vertex in self.mesh.vertices.iter_mut() {
-            vertex.pos = self.view.opengl * vertex.pos;
+        // self.mesh.triangles.sort();
+        // for vertex in self.mesh.vertices.iter_mut() {
+        //     vertex.pos = self.view.opengl * vertex.pos;
+        // }
+        for task in self.draw_tasks.iter_mut() {
+            for vertex in task.vertices.iter_mut() {
+                vertex.pos = self.view.opengl * vertex.pos;
+            }
         }
+
         unsafe {
-            self.backend().draw(self.mesh.vertices.as_slice(), self.mesh.triangles.as_slice())?;
+            self.backend().draw_tasks(&self.draw_tasks);
+            // self.backend().draw(self.mesh.vertices.as_slice(), self.mesh.triangles.as_slice())?;
         }
         self.mesh.clear();
         self.draw_tasks.clear();
