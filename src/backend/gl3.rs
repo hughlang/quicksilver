@@ -11,7 +11,7 @@ use glutin::{WindowedContext, dpi::LogicalSize};
 use std::{
     collections::HashMap,
     ffi::CString,
-    mem::size_of,
+    mem::{self, size_of},
     os::raw::c_void,
     ptr::{self, null as nullptr},
     str,
@@ -57,12 +57,8 @@ in float Uses_texture;
 out vec4 outColor;
 uniform sampler2D tex;
 void main() {
-    if (Uses_texture != 0) {
-        float alpha = texture(tex, Tex_coord).a;
-        outColor = Color * vec4(1.0, 1.0, 1.0, alpha);
-    } else {
-        outColor = Color;
-    }
+    vec4 tex_color = (Uses_texture != 0) ? texture(tex, Tex_coord) : vec4(1, 1, 1, 1);
+    outColor = Color * tex_color;
 }"#;
 
 const NULL_TEXTURE_ID: u32 = 0;
@@ -74,6 +70,31 @@ fn format_gl(format: PixelFormat) -> u32 {
         PixelFormat::RGBA => gl::RGBA
     }
 }
+
+#[allow(dead_code)]
+extern "system" fn gl_debug_message(_source: u32, _type: u32, _id: u32, _sev: u32,
+                    _len: i32, message: *const libc::c_char,
+                    _param: *mut c_void)
+{
+    unsafe {
+        let s = cstring_to_string(message);
+        panic!("OpenGL Debug: {}", s);
+    }
+}
+
+#[allow(dead_code)]
+unsafe fn cstring_to_string(mut cs: *const libc::c_char) -> String {
+    let mut v : Vec<u8> = Vec::new();
+    while *cs != 0 {
+        v.push(*cs as u8);
+        cs = cs.offset(1);
+    }
+    String::from_utf8(v).expect("c-string not utf8")
+}
+
+// fn debug_callback(source: u32, type: u32, id: u32, severity: u32, length: i32, message: u8, userParam: ()) {
+
+// }
 
 impl GL3Backend {
 
@@ -101,6 +122,8 @@ impl Backend for GL3Backend {
     type Platform = WindowedContext;
 
     unsafe fn new(context: WindowedContext, texture_mode: ImageScaleStrategy, multisample: bool) -> Result<GL3Backend> {
+        // gl::DebugMessageCallback(gl_debug_message, ptr::null_mut() as *const c_void);
+
         let texture_mode = match texture_mode {
             ImageScaleStrategy::Pixelate => gl::NEAREST,
             ImageScaleStrategy::Blur => gl::LINEAR
@@ -280,7 +303,7 @@ impl Backend for GL3Backend {
     unsafe fn create_texture(&mut self, data: &[u8], width: u32, height: u32, format: PixelFormat) -> Result<ImageData> {
         let data = if data.len() == 0 { nullptr() } else { data.as_ptr() as *const c_void };
         let format = format_gl(format);
-        gl::PixelStorei(gl::UNPACK_ALIGNMENT, 1);
+        // gl::PixelStorei(gl::UNPACK_ALIGNMENT, 1);
 
         let id = {
             let mut texture = 0;
@@ -288,16 +311,15 @@ impl Backend for GL3Backend {
             texture
         };
         eprintln!("Created texture id={} width x={:?} y={:?}", id, width, height);
-        // self.texture = id;
-        gl::ActiveTexture(gl::TEXTURE0 + id as u32);
-        // gl::BindTexture(gl::TEXTURE_2D, id);
+        // gl::ActiveTexture(gl::TEXTURE0 as u32);
+        gl::BindTexture(gl::TEXTURE_2D, id);
         gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::CLAMP_TO_EDGE as i32);
         gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::CLAMP_TO_EDGE as i32);
         gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::NEAREST as i32);
         gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::NEAREST as i32);
         gl::TexImage2D(gl::TEXTURE_2D, 0, format as i32, width as i32,
                         height as i32, 0, format, gl::UNSIGNED_BYTE, data);
-        // gl::GenerateMipmap(gl::TEXTURE_2D);
+        gl::GenerateMipmap(gl::TEXTURE_2D);
         Ok(ImageData { id, width, height })
     }
 
