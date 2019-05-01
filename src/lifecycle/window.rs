@@ -354,8 +354,8 @@ impl Window {
         }
 
         unsafe {
-            self.backend().draw_tasks(&self.draw_tasks);
             self.backend().draw(self.mesh.vertices.as_slice(), self.mesh.triangles.as_slice())?;
+            self.backend().draw_tasks(&self.draw_tasks);
         }
         self.mesh.clear();
         self.draw_tasks.clear();
