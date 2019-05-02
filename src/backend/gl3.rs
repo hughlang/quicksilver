@@ -312,7 +312,7 @@ impl Backend for GL3Backend {
     unsafe fn create_texture(&mut self, data: &[u8], width: u32, height: u32, format: PixelFormat) -> Result<ImageData> {
         let data = if data.len() == 0 { nullptr() } else { data.as_ptr() as *const c_void };
         let format = format_gl(format);
-        // gl::PixelStorei(gl::UNPACK_ALIGNMENT, 1);
+        gl::PixelStorei(gl::UNPACK_ALIGNMENT, 1);
 
         let id = {
             let mut texture = 0;
@@ -321,8 +321,8 @@ impl Backend for GL3Backend {
         };
         eprintln!("Created texture id={} width x={:?} y={:?}", id, width, height);
         // gl::ActiveTexture(gl::TEXTURE0 as u32);
-        // gl::ActiveTexture(gl::TEXTURE0 + id as u32);
-        gl::BindTexture(gl::TEXTURE_2D, id);
+        gl::ActiveTexture(gl::TEXTURE0 + id as u32);
+        // gl::BindTexture(gl::TEXTURE_2D, id);  // WARN: Enabling this makes draw_tasks fail
         gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::CLAMP_TO_EDGE as i32);
         gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::CLAMP_TO_EDGE as i32);
         gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::NEAREST as i32);
@@ -339,7 +339,7 @@ impl Backend for GL3Backend {
         let format = format_gl(format);
         let id = *texture_id as u32;
         // https://developer.mozilla.org/en-US/docs/Web/API/WebGLRenderingContext/texSubImage2D
-        // gl::ActiveTexture(gl::TEXTURE0 + id);
+        gl::ActiveTexture(gl::TEXTURE0 + id);
         gl::BindTexture(gl::TEXTURE_2D, id);
         // gl::TexStorage2D(gl::TEXTURE_2D, 1, format, rect.width() as _, rect.height() as _);
         gl::TexSubImage2D(
