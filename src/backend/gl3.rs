@@ -435,7 +435,7 @@ impl Backend for GL3Backend {
                 fragment_id,
                 texture_id,
                 location_id: 0,
-                serializer: Box::   new(serializer),
+                serializer: Box::new(serializer),
             };
 
             self.tex_units.push(unit);
@@ -498,13 +498,17 @@ impl Backend for GL3Backend {
         }
     }
 
-    fn configure_fields(&mut self, idx: usize, fields: &Vec<(String, u32)>, out_color: &str, tex_name: &str) -> Result<()> {
+
+    fn configure_texture<CB>(&mut self, idx: usize, fields: &Vec<(String, u32)>, cb: CB, out_color: &str, tex_name: &str) -> Result<()>
+    where CB: Fn(Vertex) -> Vec<f32> + 'static,
+    {
         if idx >= self.tex_units.len() {
             let message = format!("Texture index {} out of bounds for len={}", idx, self.tex_units.len());
             return Err(QuicksilverError::ContextError(message));
         }
-        let texture = &self.tex_units[idx];
+        let texture = &mut self.tex_units[idx];
         let program_id = texture.program_id;
+        self.tex_units[idx].serializer = Box::new(cb);
         unsafe {
 
             let float_size = size_of::<f32>() as u32;
@@ -562,15 +566,15 @@ impl Backend for GL3Backend {
             gl::BindTexture(gl::TEXTURE_2D, texture.texture_id);
             gl::Enable(gl::TEXTURE_2D);
             // FIXME: don't use globals
-            gl::Uniform1i(self.texture_location, i as i32);
+            gl::Uniform1i(texture.location_id, i as i32);
 
             // FIXME: serializer is gone!
 
-            // let mut cb = &texture.serializer;
-            // for vertex in &task.vertices {
-            //     let mut verts = (&mut cb)(*vertex);
-            //     vertices.append(&mut verts);
-            // }
+            let mut cb = &texture.serializer;
+            for vertex in &task.vertices {
+                let mut verts = (&mut cb)(*vertex);
+                vertices.append(&mut verts);
+            }
             for triangle in &task.triangles {
                 indices.extend_from_slice(&triangle.indices);
             }
@@ -581,7 +585,7 @@ impl Backend for GL3Backend {
             let index_length = size_of::<u32>() * indices.len();
             let index_data = indices.as_ptr() as *const c_void;
 
-            eprintln!("vertex_length={:?} index_length={:?}", vertex_length, index_length);
+            // eprintln!("vertex_length={:?} index_length={:?}", vertex_length, index_length);
             gl::BufferData(gl::ARRAY_BUFFER, vertex_length as isize, vertex_data, gl::DYNAMIC_DRAW);
             gl::BufferData(gl::ELEMENT_ARRAY_BUFFER, index_length as isize, index_data, gl::DYNAMIC_DRAW);
 

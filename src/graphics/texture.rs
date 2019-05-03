@@ -61,11 +61,13 @@ impl Texture {
     }
 
     /// Set the fields that match the shader program inputs
-    pub fn with_fields(mut self, fields: &[(&str, u32)], out_color: &str, sampler: &str, window: &mut Window) -> Self {
+    pub fn with_fields<CB>(mut self, fields: &[(&str, u32)], cb: CB, out_color: &str, sampler: &str, window: &mut Window) -> Self
+    where CB: Fn(Vertex) -> Vec<f32> + 'static
+    {
         self.fields = fields.iter().map(|(s, n)| (s.to_string(), n.clone())).collect();
         self.out_color = out_color.to_string();
         self.sampler = sampler.to_string();
-        let _ = window.backend().configure_fields(self.texture_idx, &self.fields, out_color, sampler);
+        let _ = window.backend().configure_texture(self.texture_idx, &self.fields, cb, out_color, sampler);
         self
     }
 
