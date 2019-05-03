@@ -430,7 +430,7 @@ impl Backend for WebGLBackend {
         Ok(())
     }
 
-    fn configure_fields(&self, idx: usize, fields: &Vec<(String, u32)>, out_color: &str) -> Result<()> {
+    fn configure_fields(&mut self, idx: usize, fields: &Vec<(String, u32)>, out_color: &str, tex_name: &str) -> Result<()> {
         if idx >= self.tex_units.len() {
             let message = format!("Texture index {} out of bounds for len={}", idx, self.tex_units.len());
             return Err(QuicksilverError::ContextError(message));

@@ -23,7 +23,7 @@ pub(crate) trait Backend {
     fn prepare_texture(&mut self, vertex_shader: &str, fragment_shader: &str) -> Result<usize>;
     fn upload_texture(&mut self, idx: usize, data: &[u8], width: u32, height: u32, format: PixelFormat) -> Result<()>;
     fn update_texture(&mut self, idx: usize, data: &[u8], rect: &Rectangle, format: PixelFormat) -> Result<()>;
-    fn configure_fields(&self, idx: usize, fields: &Vec<(String, u32)>, out_color: &str) -> Result<()>;
+    fn configure_fields(&mut self, idx: usize, fields: &Vec<(String, u32)>, out_color: &str, tex_name: &str) -> Result<()>;
 
     unsafe fn draw_tasks(&mut self, tasks: &Vec<DrawTask>);
 

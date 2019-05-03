@@ -92,7 +92,7 @@ unsafe fn cstring_to_string(mut cs: *const libc::c_char) -> String {
 }
 
 pub struct TextureUnit {
-    /// The ImageData.id value returned by glGenTextures in backend.create_texture.
+    /// The id value returned by glGenTextures
     pub texture_id: u32,
     /// The id returned by glCreateProgram in backend.link_program.
     pub program_id: u32,
@@ -101,7 +101,9 @@ pub struct TextureUnit {
     /// The id returned when glCreateShader in backend.compile_shader for the fragment shader
     pub fragment_id: u32,
     /// The location
-    pub location_id: u32,
+    pub location_id: i32,
+    /// The serializer function
+    pub serializer: Box<dyn Fn(Vertex) -> Vec<f32> + 'static>,
 }
 
 impl Backend for GL3Backend {
@@ -421,13 +423,21 @@ impl Backend for GL3Backend {
                 gl::GenTextures(1, &mut texture as *mut u32);
                 texture
             };
+
+            // Create a no-op serializer function
+            let serializer = |_vertex| -> Vec<f32> {
+                Vec::new()
+            };
+
             let unit = TextureUnit {
                 program_id,
                 vertex_id,
                 fragment_id,
                 texture_id,
                 location_id: 0,
+                serializer: Box::   new(serializer),
             };
+
             self.tex_units.push(unit);
             return Ok(self.tex_units.len() - 1);
         }
@@ -488,7 +498,7 @@ impl Backend for GL3Backend {
         }
     }
 
-    fn configure_fields(&self, idx: usize, fields: &Vec<(String, u32)>, out_color: &str) -> Result<()> {
+    fn configure_fields(&mut self, idx: usize, fields: &Vec<(String, u32)>, out_color: &str, tex_name: &str) -> Result<()> {
         if idx >= self.tex_units.len() {
             let message = format!("Texture index {} out of bounds for len={}", idx, self.tex_units.len());
             return Err(QuicksilverError::ContextError(message));
@@ -529,8 +539,9 @@ impl Backend for GL3Backend {
             gl::BindFragDataLocation(program_id, 0, raw as *mut i8);
             CString::from_raw(raw);
 
-            let raw = CString::new("tex").expect("No tex").into_raw();
+            let raw = CString::new(tex_name).expect("No tex").into_raw();
             let location = gl::GetUniformLocation(program_id, raw as *const i8);
+            self.tex_units[idx].location_id = location;
             eprintln!("texture location={:?} for program_id={:?}", location, program_id);
             Ok(())
         }
@@ -538,41 +549,44 @@ impl Backend for GL3Backend {
 
     unsafe fn draw_tasks(&mut self, tasks: &Vec<DrawTask>) {
         for task in tasks {
+
+            if task.texture_idx >= self.tex_units.len() {
+                eprintln!("Texture index {} out of bounds for len={}", task.texture_idx, self.tex_units.len());
+                return;
+            }
+            let texture = &self.tex_units[task.texture_idx];
+            let i = task.texture_idx;
             let mut vertices: Vec<f32> = Vec::new();
             let mut indices: Vec<u32> = Vec::new();
-            if let Some(i) = self.tex_units.iter().position(|x| x.texture_id == task.texture_id) {
-                // eprintln!("[draw_tasks] found texture id={:?} index={:?} location={}", task.texture_id, i, self.texture_location);
-                let texture = &self.tex_units[i];
-                gl::ActiveTexture(gl::TEXTURE0 + i as u32);
-                gl::BindTexture(gl::TEXTURE_2D, texture.texture_id);
-                gl::Enable(gl::TEXTURE_2D);
-                // FIXME: don't use globals
-                gl::Uniform1i(self.texture_location, i as i32);
+            gl::ActiveTexture(gl::TEXTURE0 + i as u32);
+            gl::BindTexture(gl::TEXTURE_2D, texture.texture_id);
+            gl::Enable(gl::TEXTURE_2D);
+            // FIXME: don't use globals
+            gl::Uniform1i(self.texture_location, i as i32);
 
-                // FIXME: serializer is gone!
+            // FIXME: serializer is gone!
 
-                // let mut cb = &texture.serializer;
-                // for vertex in &task.vertices {
-                //     let mut verts = (&mut cb)(*vertex);
-                //     vertices.append(&mut verts);
-                // }
-                for triangle in &task.triangles {
-                    indices.extend_from_slice(&triangle.indices);
-                }
-
-                let vertex_length = size_of::<f32>() * vertices.len();
-                let vertex_data = vertices.as_ptr() as *const c_void;
-
-                let index_length = size_of::<u32>() * indices.len();
-                let index_data = indices.as_ptr() as *const c_void;
-
-                eprintln!("vertex_length={:?} index_length={:?}", vertex_length, index_length);
-                gl::BufferData(gl::ARRAY_BUFFER, vertex_length as isize, vertex_data, gl::DYNAMIC_DRAW);
-                gl::BufferData(gl::ELEMENT_ARRAY_BUFFER, index_length as isize, index_data, gl::DYNAMIC_DRAW);
-
-                // Draw the triangles
-                gl::DrawElements(gl::TRIANGLES, indices.len() as i32, gl::UNSIGNED_INT, nullptr());
+            // let mut cb = &texture.serializer;
+            // for vertex in &task.vertices {
+            //     let mut verts = (&mut cb)(*vertex);
+            //     vertices.append(&mut verts);
+            // }
+            for triangle in &task.triangles {
+                indices.extend_from_slice(&triangle.indices);
             }
+
+            let vertex_length = size_of::<f32>() * vertices.len();
+            let vertex_data = vertices.as_ptr() as *const c_void;
+
+            let index_length = size_of::<u32>() * indices.len();
+            let index_data = indices.as_ptr() as *const c_void;
+
+            eprintln!("vertex_length={:?} index_length={:?}", vertex_length, index_length);
+            gl::BufferData(gl::ARRAY_BUFFER, vertex_length as isize, vertex_data, gl::DYNAMIC_DRAW);
+            gl::BufferData(gl::ELEMENT_ARRAY_BUFFER, index_length as isize, index_data, gl::DYNAMIC_DRAW);
+
+            // Draw the triangles
+            gl::DrawElements(gl::TRIANGLES, indices.len() as i32, gl::UNSIGNED_INT, nullptr());
         }
     }
 }
