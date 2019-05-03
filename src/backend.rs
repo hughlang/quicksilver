@@ -1,7 +1,7 @@
 use crate::{
     Result,
     geom::{Rectangle, Vector},
-    graphics::{Background::Col, BlendMode, Color, DrawTask, Texture, GpuTriangle, Image, ImageScaleStrategy, PixelFormat, Surface, Vertex},
+    graphics::{Background::Col, BlendMode, Color, DrawTask, GpuTriangle, Image, ImageScaleStrategy, PixelFormat, Surface, Vertex},
     input::MouseCursor,
 };
 
@@ -18,14 +18,14 @@ pub(crate) trait Backend {
     fn present(&self) -> Result<()>;
 
     unsafe fn create_texture(&mut self, data: &[u8], width: u32, height: u32, format: PixelFormat) -> Result<ImageData>;
-    unsafe fn update_texture(&mut self, texture_id: &u32, data: &[u8], rect: &Rectangle, format: PixelFormat);
     unsafe fn destroy_texture(&mut self, data: &mut ImageData);
 
-    unsafe fn compile_shader(&self, src: &str, stype: u32) -> Result<u32>;
-    unsafe fn link_program(&self, vs: u32, fs: u32) -> Result<u32>;
-    unsafe fn configure_fields(&self, program_id: u32, fields: &Vec<(String, u32)>, out_color: &str) -> Result<()>;
+    fn prepare_texture(&mut self, vertex_shader: &str, fragment_shader: &str) -> Result<usize>;
+    fn upload_texture(&mut self, idx: usize, data: &[u8], width: u32, height: u32, format: PixelFormat) -> Result<()>;
+    fn update_texture(&mut self, idx: usize, data: &[u8], rect: &Rectangle, format: PixelFormat) -> Result<()>;
+    fn configure_fields(&self, idx: usize, fields: &Vec<(String, u32)>, out_color: &str) -> Result<()>;
+
     unsafe fn draw_tasks(&mut self, tasks: &Vec<DrawTask>);
-    fn register_texture(&mut self, texture_id: u32, texture: Texture);
 
     unsafe fn create_surface(&mut self, image: &Image) -> Result<SurfaceData>;
     unsafe fn bind_surface(&mut self, surface: &Surface);

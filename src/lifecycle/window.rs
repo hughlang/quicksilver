@@ -2,7 +2,7 @@ use crate::{
     Result,
     backend::{Backend, BackendImpl, ImageData, instance, set_instance},
     geom::{Rectangle, Scalar, Transform, Vector},
-    graphics::{Background, BlendMode, Color, Drawable, DrawTask, Texture, Mesh, PixelFormat, ResizeStrategy, View},
+    graphics::{Background, BlendMode, Color, Drawable, DrawTask, Mesh, PixelFormat, ResizeStrategy, View},
     input::{ButtonState, Gamepad, Keyboard, Mouse, MouseCursor},
     lifecycle::{Event, Settings},
 };
@@ -539,14 +539,11 @@ impl Window {
 
     /// Passthru method to access the backend OpenGL/WebGL method.
     /// This is designed to update a rect region in the texture already created in the GPU.
-    pub fn update_texture(&mut self, texture_id: &u32, data: &[u8], rect: &Rectangle, format: PixelFormat) {
-        unsafe { self.backend().update_texture(texture_id, data, rect, format) }
-    }
-
-    /// Passthru method to save the texture in the GL backend, which can lookup the
-    /// related texture using the texture_id
-    pub fn register_texture(&mut self, texture_id: u32, texture: Texture) {
-        self.backend().register_texture(texture_id, texture);
+    pub fn update_texture(&mut self, texture_idx: usize, data: &[u8], rect: &Rectangle, format: PixelFormat) {
+        let result = self.backend().update_texture(texture_idx, data, rect, format);
+        if result.is_err() {
+            eprintln!("ERROR={:?}", result);
+        }
     }
 
     /// Experimental method to make GL rendering more modular

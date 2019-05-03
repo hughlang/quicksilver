@@ -3,14 +3,14 @@ use crate::{
     backend::{Backend, ImageData, SurfaceData, VERTEX_SIZE},
     error::QuicksilverError,
     geom::{Rectangle, Vector},
-    graphics::{BlendMode, Color, DrawTask, GpuTriangle, Image, ImageScaleStrategy, PixelFormat, Surface, Texture, Vertex},
+    graphics::{BlendMode, Color, DrawTask, GpuTriangle, Image, ImageScaleStrategy, PixelFormat, Surface, Vertex},
     input::MouseCursor
 };
 use gl::types::*;
 use glutin::{WindowedContext, dpi::LogicalSize};
 use std::{
     ffi::CString,
-    mem::{self, size_of},
+    mem::size_of,
     os::raw::c_void,
     ptr::{self, null as nullptr},
     str,
@@ -31,7 +31,7 @@ pub struct GL3Backend {
     vao: u32,
     texture_location: i32,
     texture_mode: u32,
-    textures: Vec<Texture>,
+    tex_units: Vec<TextureUnit>,
 }
 
 const DEFAULT_VERTEX_SHADER: &str = r#"#version 150
@@ -91,39 +91,17 @@ unsafe fn cstring_to_string(mut cs: *const libc::c_char) -> String {
     String::from_utf8(v).expect("c-string not utf8")
 }
 
-impl GL3Backend {
-
-    fn add_draw_task(&mut self, task: &DrawTask) -> Result<()> {
-        // if self.textures_map.get(&task.texture_id).is_none() {
-        //     return Err(QuicksilverError::ContextError(format!("Texture lookup failed for id={}", task.texture_id)));
-        // }
-        // eprintln!("Add draw task={:?} y={:?}", task.texture_id, 0);
-        if let Some(i) = self.textures.iter().position(|x| x.texture_id == task.texture_id) {
-            eprintln!("Found texture id={:?} index={:?}", task.texture_id, i);
-            let texture = &self.textures[i];
-            let mut cb = &texture.serializer;
-            for vertex in &task.vertices {
-                let mut vertices = (&mut cb)(*vertex);
-                // eprintln!("count={:?} data={:?}", vertices.len(), vertices);
-                self.vertices.append(&mut vertices);
-            }
-            for triangle in task.triangles.iter() {
-                self.indices.extend(triangle.indices.iter());
-            }
-        }
-        // if let Some(texture) = self.textures_map.get(&task.texture_id) {
-        //     let mut cb = &texture.serializer;
-        //     for vertex in &task.vertices {
-        //         let mut vertices = (&mut cb)(*vertex);
-        //         // eprintln!("count={:?} data={:?}", vertices.len(), vertices);
-        //         self.vertices.append(&mut vertices);
-        //     }
-        //     for triangle in task.triangles.iter() {
-        //         self.indices.extend(triangle.indices.iter());
-        //     }
-        // }
-        Ok(())
-    }
+pub struct TextureUnit {
+    /// The ImageData.id value returned by glGenTextures in backend.create_texture.
+    pub texture_id: u32,
+    /// The id returned by glCreateProgram in backend.link_program.
+    pub program_id: u32,
+    /// The id returned when glCreateShader in backend.compile_shader for the vertex shader
+    pub vertex_id: u32,
+    /// The id returned when glCreateShader in backend.compile_shader for the fragment shader
+    pub fragment_id: u32,
+    /// The location
+    pub location_id: u32,
 }
 
 impl Backend for GL3Backend {
@@ -186,7 +164,7 @@ impl Backend for GL3Backend {
             vbo, ebo, vao,
             texture_location: 0,
             texture_mode,
-            textures: Vec::new()
+            tex_units: Vec::new(),
         })
     }
 
@@ -320,7 +298,6 @@ impl Backend for GL3Backend {
             texture
         };
         eprintln!("Created texture id={} width x={:?} y={:?}", id, width, height);
-        // gl::ActiveTexture(gl::TEXTURE0 as u32);
         gl::ActiveTexture(gl::TEXTURE0 + id as u32);
         // gl::BindTexture(gl::TEXTURE_2D, id);  // WARN: Enabling this makes draw_tasks fail
         gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::CLAMP_TO_EDGE as i32);
@@ -330,29 +307,8 @@ impl Backend for GL3Backend {
         gl::TexImage2D(gl::TEXTURE_2D, 0, format as i32, width as i32,
                         height as i32, 0, format, gl::UNSIGNED_BYTE, data);
         // Note: this call is not necessary, but help some use cases.
-        // gl::GenerateMipmap(gl::TEXTURE_2D);
+        gl::GenerateMipmap(gl::TEXTURE_2D);
         Ok(ImageData { id, width, height })
-    }
-
-    unsafe fn update_texture(&mut self, texture_id: &u32, data: &[u8], rect: &Rectangle, format: PixelFormat) {
-        // eprintln!("Updating texture_id={:?} rect={:?}", texture_id, rect);
-        let format = format_gl(format);
-        let id = *texture_id as u32;
-        // https://developer.mozilla.org/en-US/docs/Web/API/WebGLRenderingContext/texSubImage2D
-        gl::ActiveTexture(gl::TEXTURE0 + id);
-        gl::BindTexture(gl::TEXTURE_2D, id);
-        // gl::TexStorage2D(gl::TEXTURE_2D, 1, format, rect.width() as _, rect.height() as _);
-        gl::TexSubImage2D(
-            gl::TEXTURE_2D,
-            0,
-            rect.x() as _,
-            rect.y() as _,
-            rect.width() as _,
-            rect.height() as _,
-            format,
-            gl::UNSIGNED_BYTE,
-            data.as_ptr() as _,
-        );
     }
 
     unsafe fn destroy_texture(&mut self, data: &mut ImageData) {
@@ -454,6 +410,176 @@ impl Backend for GL3Backend {
         self.context.set_inner_size(size.into());
     }
 
+    fn prepare_texture(&mut self, vertex_shader: &str, fragment_shader: &str) -> Result<usize> {
+        unsafe {
+            let vertex_id = self.compile_shader(vertex_shader, gl::VERTEX_SHADER).unwrap();
+            let fragment_id = self.compile_shader(fragment_shader, gl::FRAGMENT_SHADER).unwrap();
+            let program_id = self.link_program(vertex_id, fragment_id).unwrap();
+
+            let texture_id = {
+                let mut texture = 0;
+                gl::GenTextures(1, &mut texture as *mut u32);
+                texture
+            };
+            let unit = TextureUnit {
+                program_id,
+                vertex_id,
+                fragment_id,
+                texture_id,
+                location_id: 0,
+            };
+            self.tex_units.push(unit);
+            return Ok(self.tex_units.len() - 1);
+        }
+    }
+
+    fn upload_texture(&mut self, idx: usize, data: &[u8], width: u32, height: u32, format: PixelFormat) -> Result<()> {
+        unsafe {
+            if idx >= self.tex_units.len() {
+                let message = format!("Texture index {} out of bounds for len={}", idx, self.tex_units.len());
+                return Err(QuicksilverError::ContextError(message));
+            }
+            let texture = &self.tex_units[idx];
+
+            let data = if data.len() == 0 { nullptr() } else { data.as_ptr() as *const c_void };
+            let format = format_gl(format);
+            gl::PixelStorei(gl::UNPACK_ALIGNMENT, 1);
+            gl::ActiveTexture(gl::TEXTURE0 + texture.texture_id);
+            // gl::BindTexture(gl::TEXTURE_2D, id);  // WARN: Enabling this makes draw_tasks fail
+            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::CLAMP_TO_EDGE as i32);
+            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::CLAMP_TO_EDGE as i32);
+            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::NEAREST as i32);
+            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::NEAREST as i32);
+            gl::TexImage2D(gl::TEXTURE_2D, 0, format as i32, width as i32,
+                            height as i32, 0, format, gl::UNSIGNED_BYTE, data);
+            // Note: this call is not necessary, but help some use cases.
+            gl::GenerateMipmap(gl::TEXTURE_2D);
+            return Ok(());
+        }
+    }
+
+    fn update_texture(&mut self, idx: usize, data: &[u8], rect: &Rectangle, format: PixelFormat) -> Result<()> {
+        // eprintln!("Updating texture_id={:?} rect={:?}", texture_id, rect);
+        if idx >= self.tex_units.len() {
+            let message = format!("Texture index {} out of bounds for len={}", idx, self.tex_units.len());
+            return Err(QuicksilverError::ContextError(message));
+        }
+        let texture = &self.tex_units[idx];
+
+        unsafe {
+            let format = format_gl(format);
+            let id = texture.texture_id;
+            // https://developer.mozilla.org/en-US/docs/Web/API/WebGLRenderingContext/texSubImage2D
+            gl::ActiveTexture(gl::TEXTURE0 + id);
+            gl::BindTexture(gl::TEXTURE_2D, id);
+            // gl::TexStorage2D(gl::TEXTURE_2D, 1, format, rect.width() as _, rect.height() as _);
+            gl::TexSubImage2D(
+                gl::TEXTURE_2D,
+                0,
+                rect.x() as _,
+                rect.y() as _,
+                rect.width() as _,
+                rect.height() as _,
+                format,
+                gl::UNSIGNED_BYTE,
+                data.as_ptr() as _,
+            );
+            Ok(())
+        }
+    }
+
+    fn configure_fields(&self, idx: usize, fields: &Vec<(String, u32)>, out_color: &str) -> Result<()> {
+        if idx >= self.tex_units.len() {
+            let message = format!("Texture index {} out of bounds for len={}", idx, self.tex_units.len());
+            return Err(QuicksilverError::ContextError(message));
+        }
+        let texture = &self.tex_units[idx];
+        let program_id = texture.program_id;
+        unsafe {
+
+            let float_size = size_of::<f32>() as u32;
+            let mut offset = 0;
+
+            let vert_size = fields.iter().fold(0, |acc, x| acc + x.1);
+            let stride_distance = (vert_size as usize * size_of::<f32>()) as i32;
+
+            for (v_field, float_count) in fields {
+                let size = *float_count;
+                let c_name = CString::new(v_field.to_string()).expect("No interior null bytes in shader").into_raw();
+                let attr = gl::GetAttribLocation(program_id, c_name as *const i8);
+                CString::from_raw(c_name);
+                if attr < 0 {
+                    eprintln!("configure_fields error: attr={:?} y={:?}", attr, 0);
+                    return Err(QuicksilverError::ContextError(format!("{} GetAttribLocation -> {}", v_field, attr)));
+                }
+                gl::VertexAttribPointer(
+                    attr as u32,
+                    size as i32,
+                    gl::FLOAT,
+                    gl::FALSE,
+                    stride_distance,
+                    offset as _,
+                );
+                gl::EnableVertexAttribArray(attr as u32);
+
+                offset += size * float_size;
+            }
+            let raw = CString::new(out_color).expect("No interior null bytes in shader").into_raw();
+            eprintln!("configure_fields program_id={:?} color key={:?}", program_id, out_color);
+            gl::BindFragDataLocation(program_id, 0, raw as *mut i8);
+            CString::from_raw(raw);
+
+            let raw = CString::new("tex").expect("No tex").into_raw();
+            let location = gl::GetUniformLocation(program_id, raw as *const i8);
+            eprintln!("texture location={:?} for program_id={:?}", location, program_id);
+            Ok(())
+        }
+    }
+
+    unsafe fn draw_tasks(&mut self, tasks: &Vec<DrawTask>) {
+        for task in tasks {
+            let mut vertices: Vec<f32> = Vec::new();
+            let mut indices: Vec<u32> = Vec::new();
+            if let Some(i) = self.tex_units.iter().position(|x| x.texture_id == task.texture_id) {
+                // eprintln!("[draw_tasks] found texture id={:?} index={:?} location={}", task.texture_id, i, self.texture_location);
+                let texture = &self.tex_units[i];
+                gl::ActiveTexture(gl::TEXTURE0 + i as u32);
+                gl::BindTexture(gl::TEXTURE_2D, texture.texture_id);
+                gl::Enable(gl::TEXTURE_2D);
+                // FIXME: don't use globals
+                gl::Uniform1i(self.texture_location, i as i32);
+
+                // FIXME: serializer is gone!
+
+                // let mut cb = &texture.serializer;
+                // for vertex in &task.vertices {
+                //     let mut verts = (&mut cb)(*vertex);
+                //     vertices.append(&mut verts);
+                // }
+                for triangle in &task.triangles {
+                    indices.extend_from_slice(&triangle.indices);
+                }
+
+                let vertex_length = size_of::<f32>() * vertices.len();
+                let vertex_data = vertices.as_ptr() as *const c_void;
+
+                let index_length = size_of::<u32>() * indices.len();
+                let index_data = indices.as_ptr() as *const c_void;
+
+                eprintln!("vertex_length={:?} index_length={:?}", vertex_length, index_length);
+                gl::BufferData(gl::ARRAY_BUFFER, vertex_length as isize, vertex_data, gl::DYNAMIC_DRAW);
+                gl::BufferData(gl::ELEMENT_ARRAY_BUFFER, index_length as isize, index_data, gl::DYNAMIC_DRAW);
+
+                // Draw the triangles
+                gl::DrawElements(gl::TRIANGLES, indices.len() as i32, gl::UNSIGNED_INT, nullptr());
+            }
+        }
+    }
+}
+
+impl GL3Backend {
+
+    /// Returns the u32 id value of the compiled shader
     unsafe fn compile_shader(&self, src: &str, stype: u32) -> Result<u32> {
         let shader = gl::CreateShader(stype);
         // Attempt to compile the shader
@@ -509,127 +635,12 @@ impl Backend for GL3Backend {
         }
         Ok(program)
     }
-
-    unsafe fn configure_fields(&self, program_id: u32, fields: &Vec<(String, u32)>, out_color: &str) -> Result<()> {
-        let float_size = size_of::<f32>() as u32;
-        let mut offset = 0;
-
-        let vert_size = fields.iter().fold(0, |acc, x| acc + x.1);
-        let stride_distance = (vert_size as usize * size_of::<f32>()) as i32;
-
-        for (v_field, float_count) in fields {
-            let size = *float_count;
-            let c_name = CString::new(v_field.to_string()).expect("No interior null bytes in shader").into_raw();
-            let attr = gl::GetAttribLocation(program_id, c_name as *const i8);
-            CString::from_raw(c_name);
-            if attr < 0 {
-                eprintln!("configure_fields error: attr={:?} y={:?}", attr, 0);
-                return Err(QuicksilverError::ContextError(format!("{} GetAttribLocation -> {}", v_field, attr)));
-            }
-            gl::VertexAttribPointer(
-                attr as u32,
-                size as i32,
-                gl::FLOAT,
-                gl::FALSE,
-                stride_distance,
-                offset as _,
-            );
-            gl::EnableVertexAttribArray(attr as u32);
-
-            offset += size * float_size;
-        }
-        let raw = CString::new(out_color).expect("No interior null bytes in shader").into_raw();
-        eprintln!("configure_fields program_id={:?} color key={:?}", program_id, out_color);
-        gl::BindFragDataLocation(program_id, 0, raw as *mut i8);
-        CString::from_raw(raw);
-
-        let raw = CString::new("tex").expect("No tex").into_raw();
-        let location = gl::GetUniformLocation(program_id, raw as *const i8);
-        eprintln!("texture location={:?} for program_id={:?}", location, program_id);
-        Ok(())
-    }
-
-    fn register_texture(&mut self, _texture_id: u32, texture: Texture) {
-        self.textures.push(texture);
-    }
-
-    unsafe fn draw_tasks(&mut self, tasks: &Vec<DrawTask>) {
-        for task in tasks {
-            let mut vertices: Vec<f32> = Vec::new();
-            let mut indices: Vec<u32> = Vec::new();
-            if let Some(i) = self.textures.iter().position(|x| x.texture_id == task.texture_id) {
-                eprintln!("[draw_tasks] found texture id={:?} index={:?} location={}", task.texture_id, i, self.texture_location);
-                let texture = &self.textures[i];
-                gl::ActiveTexture(gl::TEXTURE0 + i as u32);
-                gl::BindTexture(gl::TEXTURE_2D, texture.texture_id);
-                gl::Enable(gl::TEXTURE_2D);
-                // gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, self.texture_mode as i32);
-                // gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, self.texture_mode as i32);
-                gl::Uniform1i(self.texture_location, i as i32);
-
-                let mut cb = &texture.serializer;
-                for vertex in &task.vertices {
-                    let mut verts = (&mut cb)(*vertex);
-                    // eprintln!("count={:?} verts.len={:?}", vertices.len(), verts.len());
-                    vertices.append(&mut verts);
-                }
-                for triangle in &task.triangles {
-                    indices.extend_from_slice(&triangle.indices);
-                }
-
-                let vertex_length = size_of::<f32>() * vertices.len();
-                let vertex_data = vertices.as_ptr() as *const c_void;
-
-                let index_length = size_of::<u32>() * indices.len();
-                let index_data = indices.as_ptr() as *const c_void;
-
-                eprintln!("vertex_length={:?} index_length={:?}", vertex_length, index_length);
-                gl::BufferData(gl::ARRAY_BUFFER, vertex_length as isize, vertex_data, gl::DYNAMIC_DRAW);
-                gl::BufferData(gl::ELEMENT_ARRAY_BUFFER, index_length as isize, index_data, gl::DYNAMIC_DRAW);
-
-                // Draw the triangles
-                gl::DrawElements(gl::TRIANGLES, indices.len() as i32, gl::UNSIGNED_INT, nullptr());
-
-            }
-
-        }
-        // Check vertices size and resize array buffer if needed
-        // let vertex_length = size_of::<f32>() * self.vertices.len();
-        // if vertex_length > self.vertex_length {
-        //     self.vertex_length = vertex_length * 2;
-        //     gl::BufferData(gl::ARRAY_BUFFER, self.vertex_length as isize, nullptr(), gl::STREAM_DRAW);
-        // }
-
-        // let vertex_data = self.vertices.as_ptr() as *const c_void;
-        // gl::BufferSubData(gl::ARRAY_BUFFER, 0, vertex_length as isize, vertex_data);
-
-        // // Check indices size and resize element array buffer if needed
-        // let index_length = size_of::<u32>() * self.indices.len();
-        // let index_data = self.indices.as_ptr() as *const c_void;
-        // if index_length > self.index_length {
-        //     eprintln!("index_length={:?} was={:?}", index_length, self.index_length);
-        //     self.index_length = index_length * 2;
-        //     gl::BufferData(gl::ELEMENT_ARRAY_BUFFER, self.index_length as isize, nullptr(), gl::STREAM_DRAW);
-        // }
-        // gl::BufferSubData(gl::ELEMENT_ARRAY_BUFFER, 0, index_length as isize, index_data);
-
-        // gl::ActiveTexture(gl::TEXTURE0);
-        // gl::BindTexture(gl::TEXTURE_2D, 1);
-        // gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, self.texture_mode as i32);
-        // gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, self.texture_mode as i32);
-
-        //     gl::Uniform1i(self.texture_location, 1);
-        //     // Draw the triangles
-        // gl::DrawElements(gl::TRIANGLES, self.indices.len() as i32, gl::UNSIGNED_INT, nullptr());
-        // self.vertices.clear();
-        // self.indices.clear();
-    }
 }
 
 impl Drop for GL3Backend {
     fn drop(&mut self) {
         unsafe {
-            for texture in &self.textures {
+            for texture in &self.tex_units {
                 gl::DeleteTextures(1, texture.texture_id as *const u32);
                 gl::DeleteProgram(texture.program_id);
                 gl::DeleteShader(texture.fragment_id);

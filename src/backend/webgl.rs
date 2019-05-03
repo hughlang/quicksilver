@@ -3,7 +3,7 @@ use crate::{
     backend::{Backend, ImageData, SurfaceData, VERTEX_SIZE},
     geom::{Rectangle, Vector},
     error::QuicksilverError,
-    graphics::{BlendMode, Color, DrawTask, Texture, GpuTriangle, Image, ImageScaleStrategy, PixelFormat, Surface, Vertex},
+    graphics::{BlendMode, Color, DrawTask, GpuTriangle, Image, ImageScaleStrategy, PixelFormat, Surface, Vertex},
     input::MouseCursor,
 };
 use std::{
@@ -45,7 +45,7 @@ pub struct WebGLBackend {
     initial_width: u32,
     initial_height: u32,
     textures: Vec<Option<WebGLTexture>>,
-    textures_map: HashMap<u32, Texture>
+    tex_units: Vec<TextureUnit>,
 }
 
 const DEFAULT_VERTEX_SHADER: &str = r#"attribute vec2 position;
@@ -73,6 +73,7 @@ void main() {
 
 fn format_gl(format: PixelFormat) -> u32 {
     match format {
+        PixelFormat::Alpha => gl::RED,
         PixelFormat::RGB => gl::RGB,
         PixelFormat::RGBA => gl::RGBA
     }
@@ -90,14 +91,12 @@ fn try_opt<T>(opt: Option<T>, operation: &str) -> Result<T> {
     }
 }
 
-impl WebGLBackend {
-
-    fn draw_tasks(&self) {
-        eprintln!("shader={:?}", self.shader);
-        eprintln!("texture={:?}", self.texture);
-        eprintln!("fragment={:?}", self.fragment);
-
-    }
+pub struct TextureUnit {
+    program_id: WebGLProgram,
+    vertex_id: WebGLShader,
+    fragment_id: WebGLShader,
+    texture_id: WebGLTexture,
+    location_id: Option<WebGLUniformLocation>
 }
 
 impl Backend for WebGLBackend {
@@ -150,7 +149,7 @@ impl Backend for WebGLBackend {
             initial_width,
             initial_height,
             textures: Vec::new(),
-            textures_map: HashMap::new(),
+            tex_units: Vec::new(),
         })
     }
 
@@ -265,37 +264,17 @@ impl Backend for WebGLBackend {
     unsafe fn create_texture(&mut self, data: &[u8], width: u32, height: u32, format: PixelFormat) -> Result<ImageData> {
         // FIXME: This numbering scheme won't work for new Texture and DrawTask scheme
         let id = self.textures.len() as u32;
-        let format = match format {
-            PixelFormat::RGB => gl::RGB as i64,
-            PixelFormat::RGBA => gl::RGBA as i64
-        };
+        let format = format_gl(format);
         let texture = try_opt(self.gl_ctx.create_texture(), "Create GL texture")?;
         self.gl_ctx.bind_texture(gl::TEXTURE_2D, Some(&texture));
         self.gl_ctx.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::CLAMP_TO_EDGE as i32);
         self.gl_ctx.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::CLAMP_TO_EDGE as i32);
         self.gl_ctx.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::NEAREST as i32);
         self.gl_ctx.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::NEAREST as i32);
-        let format = format as u32;
         self.gl_ctx.tex_image2_d(gl::TEXTURE_2D, 0, gl::RGBA as i32, width as i32, height as i32, 0, format, gl::UNSIGNED_BYTE, Some(data));
         self.gl_ctx.generate_mipmap(gl::TEXTURE_2D);
         self.textures.push(Some(texture));
         Ok(ImageData { id, width, height })
-    }
-
-    unsafe fn update_texture(&mut self, texture_id: &u32, data: &[u8], rect: &Rectangle, format: PixelFormat) {
-        // let format = format_gl(format);
-        // // https://developer.mozilla.org/en-US/docs/Web/API/WebGLRenderingContext/texSubImage2D
-        // gl::TexSubImage2D(
-        //     gl::TEXTURE_2D,
-        //     0,
-        //     rect.x() as _,
-        //     rect.y() as _,
-        //     rect.width() as _,
-        //     rect.height() as _,
-        //     format,
-        //     gl::UNSIGNED_BYTE,
-        //     data.as_ptr() as _,
-        // );
     }
 
     unsafe fn destroy_texture(&mut self, data: &mut ImageData) {
@@ -348,7 +327,8 @@ impl Backend for WebGLBackend {
     unsafe fn screenshot(&self, format: PixelFormat) -> (Vector, Vec<u8>) {
         let bytes_per_pixel = match format {
             PixelFormat::RGBA => 4,
-            PixelFormat::RGB => 3
+            PixelFormat::RGB => 3,
+            PixelFormat::Alpha => 1,
         };
         let format = format_gl(format);
         let [x, y, width, height] = self.viewport();
@@ -387,59 +367,125 @@ impl Backend for WebGLBackend {
         self.canvas.set_height(size.y as u32);
     }
 
-    // See: https://github.com/rustwasm/wasm-bindgen/blob/103da2269229141d871ffa0964707058642d3807/examples/webgl/src/lib.rs#L68
-    unsafe fn compile_shader(&self, src: &str, stype: u32) -> Result<u32> {
-        let id = try_opt(self.gl_ctx.create_shader(stype), "Compile shader")?;
-        self.gl_ctx.shader_source(&id, src);
-        self.gl_ctx.compile_shader(&id);
-        let text = format!("{:?}", id);
-        let id = text.parse::<u32>().unwrap();
-        Ok(id)
-    }
+    fn prepare_texture(&mut self, vertex_shader: &str, fragment_shader: &str) -> Result<usize> {
+        unsafe {
+            let vertex_id = self.compile_shader(vertex_shader, gl::VERTEX_SHADER)?;
+            let fragment_id = self.compile_shader(fragment_shader, gl::FRAGMENT_SHADER)?;
+            let program_id = self.link_program(&vertex_id, &fragment_id)?;
+            let texture_id = try_opt(self.gl_ctx.create_texture(), "Create texture")?;
 
-    // See: https://github.com/rustwasm/wasm-bindgen/blob/103da2269229141d871ffa0964707058642d3807/examples/webgl/src/lib.rs#L92
-    unsafe fn link_program(&self, vs: u32, fs: u32) -> Result<u32> {
-        let program = try_opt(self.gl_ctx.create_program(), "Create shader program")?;
-        self.gl_ctx.attach_shader(&program, &vs);
-        self.gl_ctx.attach_shader(&program, &fs);
-        self.gl_ctx.link_program(&program);
-        self.gl_ctx.use_program(Some(&program));
-        let text = format!("{:?}", program);
-        let id = text.parse::<u32>().unwrap();
-        Ok(id)
-    }
-
-    unsafe fn configure_fields(&self, program_id: u32, fields: &Vec<(String, u32)>, out_color: &str) -> Result<()> {
-        let float_size = size_of::<f32>() as i64;
-        let mut offset = 0;
-        let stride_distance = (VERTEX_SIZE * size_of::<f32>()) as i32;
-
-        for (v_field, float_count) in fields {
-
-            let attr = self.gl_ctx.get_attrib_location(&program_id, &*v_field) as u32;
-            self.gl_ctx.enable_vertex_attrib_array(attr);
-            self.gl_ctx.vertex_attrib_pointer(attr, *float_count as i32, gl::FLOAT, false, stride_distance, 2 * size_of::<f32>() as i64);
-            offset += float_count * float_size;
+            let unit = TextureUnit {
+                program_id,
+                vertex_id,
+                fragment_id,
+                texture_id,
+                location_id: None,
+            };
+            self.tex_units.push(unit);
+            return Ok(self.tex_units.len() - 1);
         }
+    }
+
+    fn upload_texture(&mut self, idx: usize, data: &[u8], width: u32, height: u32, format: PixelFormat) -> Result<()> {
+        unsafe {
+            if idx >= self.tex_units.len() {
+                let message = format!("Texture index {} out of bounds for len={}", idx, self.tex_units.len());
+                return Err(QuicksilverError::ContextError(message));
+            }
+            let mut texture = &mut self.tex_units[idx];
+            let format = format_gl(format);
+
+            self.gl_ctx.bind_texture(gl::TEXTURE_2D, Some(&texture.texture_id));
+            self.gl_ctx.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::CLAMP_TO_EDGE as i32);
+            self.gl_ctx.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::CLAMP_TO_EDGE as i32);
+            self.gl_ctx.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::NEAREST as i32);
+            self.gl_ctx.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::NEAREST as i32);
+            let format = format as u32;
+            self.gl_ctx.tex_image2_d(gl::TEXTURE_2D, 0, gl::RGBA as i32, width as i32, height as i32, 0, format, gl::UNSIGNED_BYTE, Some(data));
+            self.gl_ctx.generate_mipmap(gl::TEXTURE_2D);
+
+            return Ok(());
+        }
+    }
+
+    fn update_texture(&mut self, idx: usize, data: &[u8], rect: &Rectangle, format: PixelFormat) -> Result<()> {
+        if idx >= self.tex_units.len() {
+            let message = format!("Texture index {} out of bounds for len={}", idx, self.tex_units.len());
+            return Err(QuicksilverError::ContextError(message));
+        }
+        let mut texture = &mut self.tex_units[idx];
+        // let format = format_gl(format);
+        // // https://developer.mozilla.org/en-US/docs/Web/API/WebGLRenderingContext/texSubImage2D
+        // gl::TexSubImage2D(
+        //     gl::TEXTURE_2D,
+        //     0,
+        //     rect.x() as _,
+        //     rect.y() as _,
+        //     rect.width() as _,
+        //     rect.height() as _,
+        //     format,
+        //     gl::UNSIGNED_BYTE,
+        //     data.as_ptr() as _,
+        // );
         Ok(())
+    }
+
+    fn configure_fields(&self, idx: usize, fields: &Vec<(String, u32)>, out_color: &str) -> Result<()> {
+        if idx >= self.tex_units.len() {
+            let message = format!("Texture index {} out of bounds for len={}", idx, self.tex_units.len());
+            return Err(QuicksilverError::ContextError(message));
+        }
+        let texture = &self.tex_units[idx];
+
+        unsafe {
+            let mut offset: u32 = 0;
+            let float_size = size_of::<f32>();
+            let vert_size = fields.iter().fold(0, |acc, x| acc + x.1);
+            let stride_distance = (vert_size as usize * float_size) as i32;
+
+            for (v_field, float_count) in fields {
+                let count = *float_count;
+                let attr = self.gl_ctx.get_attrib_location(&texture.program_id, &*v_field) as u32;
+                self.gl_ctx.enable_vertex_attrib_array(attr);
+                self.gl_ctx.vertex_attrib_pointer(attr, count as i32, gl::FLOAT, false, stride_distance, offset as i64);
+                offset += count as u32 * float_size as u32;
+            }
+            Ok(())
+        }
     }
 
     unsafe fn draw_tasks(&mut self, tasks: &Vec<DrawTask>) {
 
     }
+}
 
-    fn register_texture(&mut self, texture_id: u32, texture: Texture) {
-        self.textures_map.insert(texture_id, texture);
+impl WebGLBackend {
+    // See: https://github.com/rustwasm/wasm-bindgen/blob/103da2269229141d871ffa0964707058642d3807/examples/webgl/src/lib.rs#L68
+    unsafe fn compile_shader(&self, src: &str, stype: u32) -> Result<WebGLShader> {
+        let id = try_opt(self.gl_ctx.create_shader(stype), "Compile shader")?;
+        self.gl_ctx.shader_source(&id, src);
+        self.gl_ctx.compile_shader(&id);
+        return Ok(id);
+    }
+
+    // See: https://github.com/rustwasm/wasm-bindgen/blob/103da2269229141d871ffa0964707058642d3807/examples/webgl/src/lib.rs#L92
+    unsafe fn link_program(&self, vs: &WebGLShader, fs: &WebGLShader) -> Result<WebGLProgram> {
+        let program = try_opt(self.gl_ctx.create_program(), "Create shader program")?;
+        self.gl_ctx.attach_shader(&program, vs);
+        self.gl_ctx.attach_shader(&program, fs);
+        self.gl_ctx.link_program(&program);
+        self.gl_ctx.use_program(Some(&program));
+        return Ok(program);
     }
 }
 
 impl Drop for WebGLBackend {
     fn drop(&mut self) {
-        for (id, texture) in &self.textures_map {
-            self.gl_ctx.delete_texture(id);
-            self.gl_ctx.delete_program(texture.shader_id);
-            self.gl_ctx.delete_shader(texture.fragment_id);
-            self.gl_ctx.delete_shader(texture.vertex_id);
+        for texture in &self.tex_units {
+            self.gl_ctx.delete_texture(Some(&texture.texture_id));
+            self.gl_ctx.delete_program(Some(&texture.program_id));
+            self.gl_ctx.delete_shader(Some(&texture.fragment_id));
+            self.gl_ctx.delete_shader(Some(&texture.vertex_id));
         }
         self.gl_ctx.delete_program(Some(&self.shader));
         self.gl_ctx.delete_shader(Some(&self.fragment));

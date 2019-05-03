@@ -25,6 +25,8 @@ pub struct Texture {
     pub vertex_id: u32,
     /// The id returned when glCreateShader in backend.compile_shader for the fragment shader
     pub fragment_id: u32,
+    /// The location
+    pub location_id: u32,
     /// List of name and field width values
     pub fields: Vec<(String, u32)>,
     /// Identifies the name of the fragment shader variable for the output color
@@ -45,6 +47,7 @@ impl Default for Texture {
             program_id: 0,
             vertex_id: 0,
             fragment_id: 0,
+            location_id: 0,
             fields: Vec::new(),
             out_color: String::default(),
             sampler: String::default(),
@@ -57,20 +60,20 @@ impl Texture {
 
     /// Initialize both shaders using the provided strings which contain OpenGL/WebGL code
     pub fn init_shaders(mut self, vertex_shader: &str, fragment_shader: &str, window: &mut Window) -> Self {
-        unsafe {
-            let vs = window.backend().compile_shader(vertex_shader, gl::VERTEX_SHADER);
-            let fs = window.backend().compile_shader(fragment_shader, gl::FRAGMENT_SHADER);
-            if vs.is_ok() && fs.is_ok() {
-                let vs = vs.unwrap();
-                let fs = fs.unwrap();
-                self.vertex_id = vs;
-                self.fragment_id = fs;
-                let pid = window.backend().link_program(vs, fs);
-                if pid.is_ok() {
-                    self.program_id = pid.unwrap();
-                }
-            }
-        }
+        // unsafe {
+        //     let vs = window.backend().compile_shader(vertex_shader, gl::VERTEX_SHADER);
+        //     let fs = window.backend().compile_shader(fragment_shader, gl::FRAGMENT_SHADER);
+        //     if vs.is_ok() && fs.is_ok() {
+        //         let vs = vs.unwrap();
+        //         let fs = fs.unwrap();
+        //         self.vertex_id = vs;
+        //         self.fragment_id = fs;
+        //         let pid = window.backend().link_program(vs, fs);
+        //         if pid.is_ok() {
+        //             self.program_id = pid.unwrap();
+        //         }
+        //     }
+        // }
         self
     }
     /// Set the fields that match the shader program inputs
@@ -79,10 +82,10 @@ impl Texture {
         self.out_color = out_color.to_string();
         self.sampler = sampler.to_string();
         unsafe{
-            let result = window.backend().configure_fields(self.program_id, &self.fields, out_color);
-            if result.is_err() {
-                eprintln!("ERROR={:?} y={:?}", result, 0);
-            }
+            // let result = window.backend().configure_fields(self.program_id, &self.fields, out_color);
+            // if result.is_err() {
+            //     eprintln!("ERROR={:?} y={:?}", result, 0);
+            // }
         }
         self
     }
