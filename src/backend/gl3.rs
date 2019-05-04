@@ -70,19 +70,6 @@ fn format_gl(format: PixelFormat) -> u32 {
     }
 }
 
-// https://github.com/zeux/oxid/blob/master/src/oxid/gfx/context.rs
-extern "system" fn debug_output_gl(_source: GLenum, _type: GLenum, _id: GLuint, _severity: GLenum,
-    _length: GLsizei, message: *const GLchar, _param: *mut GLvoid) {
-    unsafe {
-        let slice = {
-            assert!(!message.is_null());
-            CStr::from_ptr(message)
-        };
-        let text = slice.to_str().unwrap();
-        eprintln!("OpenGL Debug: {}", text);
-    }
-}
-
 pub struct TextureUnit {
     /// The id value returned by glGenTextures
     pub texture_id: u32,
@@ -98,13 +85,27 @@ pub struct TextureUnit {
     pub serializer: Box<dyn Fn(Vertex) -> Vec<f32> + 'static>,
 }
 
+// https://github.com/zeux/oxid/blob/master/src/oxid/gfx/context.rs
+extern "system" fn debug_output_gl(_source: GLenum, _type: GLenum, _id: GLuint, _severity: GLenum,
+    _length: GLsizei, message: *const GLchar, _param: *mut GLvoid) {
+    unsafe {
+        let slice = {
+            assert!(!message.is_null());
+            CStr::from_ptr(message)
+        };
+        let text = slice.to_str().unwrap();
+        eprintln!("OpenGL Debug: {}", text);
+    }
+}
+
 impl Backend for GL3Backend {
     type Platform = WindowedContext;
 
     unsafe fn new(context: WindowedContext, texture_mode: ImageScaleStrategy, multisample: bool) -> Result<GL3Backend> {
         if gl::DebugMessageCallback::is_loaded() {
             eprintln!("Load DebugMessageCallback");
-            gl::DebugMessageCallback(debug_output_gl, ptr::null());
+            gl::Enable(gl::DEBUG_OUTPUT);
+            gl::DebugMessageCallback(debug_output_gl as GLDEBUGPROC, ptr::null());
             gl::Enable(gl::DEBUG_OUTPUT_SYNCHRONOUS);
         }
 
@@ -297,8 +298,8 @@ impl Backend for GL3Backend {
             texture
         };
         eprintln!("Created texture id={} width x={:?} y={:?}", id, width, height);
-        gl::ActiveTexture(gl::TEXTURE0 + id as u32);
-        // gl::BindTexture(gl::TEXTURE_2D, id);  // WARN: Enabling this makes draw_tasks fail
+        gl::ActiveTexture(gl::TEXTURE0 as u32);
+        gl::BindTexture(gl::TEXTURE_2D, id);  // WARN: Enabling this makes draw_tasks fail
         gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::CLAMP_TO_EDGE as i32);
         gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::CLAMP_TO_EDGE as i32);
         gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::NEAREST as i32);
@@ -455,8 +456,8 @@ impl Backend for GL3Backend {
             let data = if data.len() == 0 { nullptr() } else { data.as_ptr() as *const c_void };
             let format = format_gl(format);
             gl::PixelStorei(gl::UNPACK_ALIGNMENT, 1);
-            gl::ActiveTexture(gl::TEXTURE0 + texture.texture_id);
-            gl::BindTexture(gl::TEXTURE_2D, texture.texture_id);  // WARN: Enabling this makes draw_tasks fail
+            gl::ActiveTexture(gl::TEXTURE0 + idx as u32);
+            gl::BindTexture(gl::TEXTURE_2D, texture.texture_id);
             gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::CLAMP_TO_EDGE as i32);
             gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::CLAMP_TO_EDGE as i32);
             gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::NEAREST as i32);
