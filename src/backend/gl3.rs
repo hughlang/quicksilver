@@ -9,9 +9,9 @@ use crate::{
 use gl::types::*;
 use glutin::{WindowedContext, dpi::LogicalSize};
 use std::{
-    ffi::CString,
+    ffi::{CStr, CString},
     mem::size_of,
-    os::raw::c_void,
+    os::raw::{c_void, c_char},
     ptr::{self, null as nullptr},
     str,
 };
@@ -70,25 +70,17 @@ fn format_gl(format: PixelFormat) -> u32 {
     }
 }
 
-#[allow(dead_code)]
-extern "system" fn gl_debug_message(_source: u32, _type: u32, _id: u32, _sev: u32,
-                    _len: i32, message: *const libc::c_char,
-                    _param: *mut c_void)
-{
+// https://github.com/zeux/oxid/blob/master/src/oxid/gfx/context.rs
+extern "system" fn debug_output_gl(_source: GLenum, _type: GLenum, _id: GLuint, _severity: GLenum,
+    _length: GLsizei, message: *const GLchar, _param: *mut GLvoid) {
     unsafe {
-        let s = cstring_to_string(message);
-        panic!("OpenGL Debug: {}", s);
+        let slice = {
+            assert!(!message.is_null());
+            CStr::from_ptr(message)
+        };
+        let text = slice.to_str().unwrap();
+        eprintln!("OpenGL Debug: {}", text);
     }
-}
-
-#[allow(dead_code)]
-unsafe fn cstring_to_string(mut cs: *const libc::c_char) -> String {
-    let mut v : Vec<u8> = Vec::new();
-    while *cs != 0 {
-        v.push(*cs as u8);
-        cs = cs.offset(1);
-    }
-    String::from_utf8(v).expect("c-string not utf8")
 }
 
 pub struct TextureUnit {
@@ -110,7 +102,11 @@ impl Backend for GL3Backend {
     type Platform = WindowedContext;
 
     unsafe fn new(context: WindowedContext, texture_mode: ImageScaleStrategy, multisample: bool) -> Result<GL3Backend> {
-        // gl::DebugMessageCallback(gl_debug_message, ptr::null_mut() as *const c_void);
+        if gl::DebugMessageCallback::is_loaded() {
+            eprintln!("Load DebugMessageCallback");
+            gl::DebugMessageCallback(debug_output_gl, ptr::null());
+            gl::Enable(gl::DEBUG_OUTPUT_SYNCHRONOUS);
+        }
 
         let texture_mode = match texture_mode {
             ImageScaleStrategy::Pixelate => gl::NEAREST,
@@ -155,6 +151,7 @@ impl Backend for GL3Backend {
         CString::from_raw(raw);
         gl::LinkProgram(shader);
         gl::UseProgram(shader);
+
         Ok(GL3Backend {
             context,
             texture: NULL_TEXTURE_ID,
@@ -413,7 +410,9 @@ impl Backend for GL3Backend {
     }
 
     fn prepare_texture(&mut self, vertex_shader: &str, fragment_shader: &str) -> Result<usize> {
+
         unsafe {
+
             let vertex_id = self.compile_shader(vertex_shader, gl::VERTEX_SHADER).unwrap();
             let fragment_id = self.compile_shader(fragment_shader, gl::FRAGMENT_SHADER).unwrap();
             let program_id = self.link_program(vertex_id, fragment_id).unwrap();
@@ -423,6 +422,8 @@ impl Backend for GL3Backend {
                 gl::GenTextures(1, &mut texture as *mut u32);
                 texture
             };
+
+            eprintln!("Created texture with id={:?}", texture_id);
 
             // Create a no-op serializer function
             let serializer = |_vertex| -> Vec<f32> {
@@ -455,7 +456,7 @@ impl Backend for GL3Backend {
             let format = format_gl(format);
             gl::PixelStorei(gl::UNPACK_ALIGNMENT, 1);
             gl::ActiveTexture(gl::TEXTURE0 + texture.texture_id);
-            // gl::BindTexture(gl::TEXTURE_2D, id);  // WARN: Enabling this makes draw_tasks fail
+            gl::BindTexture(gl::TEXTURE_2D, texture.texture_id);  // WARN: Enabling this makes draw_tasks fail
             gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::CLAMP_TO_EDGE as i32);
             gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::CLAMP_TO_EDGE as i32);
             gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::NEAREST as i32);
@@ -463,7 +464,7 @@ impl Backend for GL3Backend {
             gl::TexImage2D(gl::TEXTURE_2D, 0, format as i32, width as i32,
                             height as i32, 0, format, gl::UNSIGNED_BYTE, data);
             // Note: this call is not necessary, but help some use cases.
-            gl::GenerateMipmap(gl::TEXTURE_2D);
+            // gl::GenerateMipmap(gl::TEXTURE_2D);
             return Ok(());
         }
     }
@@ -480,7 +481,6 @@ impl Backend for GL3Backend {
             let format = format_gl(format);
             let id = texture.texture_id;
             // https://developer.mozilla.org/en-US/docs/Web/API/WebGLRenderingContext/texSubImage2D
-            gl::ActiveTexture(gl::TEXTURE0 + id);
             gl::BindTexture(gl::TEXTURE_2D, id);
             // gl::TexStorage2D(gl::TEXTURE_2D, 1, format, rect.width() as _, rect.height() as _);
             gl::TexSubImage2D(
@@ -497,7 +497,6 @@ impl Backend for GL3Backend {
             Ok(())
         }
     }
-
 
     fn configure_texture<CB>(&mut self, idx: usize, fields: &Vec<(String, u32)>, cb: CB, out_color: &str, tex_name: &str) -> Result<()>
     where CB: Fn(Vertex) -> Vec<f32> + 'static,
@@ -559,20 +558,18 @@ impl Backend for GL3Backend {
                 return;
             }
             let texture = &self.tex_units[task.texture_idx];
-            let i = task.texture_idx;
+            let idx = task.texture_idx as u32;
             let mut vertices: Vec<f32> = Vec::new();
             let mut indices: Vec<u32> = Vec::new();
-            gl::ActiveTexture(gl::TEXTURE0 + i as u32);
+            gl::ActiveTexture(gl::TEXTURE0 + idx);
             gl::BindTexture(gl::TEXTURE_2D, texture.texture_id);
             gl::Enable(gl::TEXTURE_2D);
-            // FIXME: don't use globals
-            gl::Uniform1i(texture.location_id, i as i32);
-
-            // FIXME: serializer is gone!
+            gl::Uniform1i(texture.location_id, 0);
 
             let mut cb = &texture.serializer;
             for vertex in &task.vertices {
                 let mut verts = (&mut cb)(*vertex);
+                // eprintln!("### verts={:?} y={:?}", verts, 0);
                 vertices.append(&mut verts);
             }
             for triangle in &task.triangles {
