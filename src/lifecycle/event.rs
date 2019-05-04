@@ -78,8 +78,8 @@ impl EventProvider {
                         events.push(Event::Key(key, state));
                     }
                 }
-                glutin::WindowEvent::ReceivedCharacter(character) if character.is_alphanumeric() => {
-                    events.push(Event::Typed(character));
+                glutin::WindowEvent::ReceivedCharacter(c) if !c.is_ascii_control() => {
+                    events.push(Event::Typed(c));
                 }
                 glutin::WindowEvent::CursorMoved { position, .. } => {
                     let position: Vector = position.into();
