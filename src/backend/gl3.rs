@@ -205,6 +205,7 @@ impl Backend for GL3Backend {
         let vertex_length = size_of::<f32>() * self.vertices.len();
         // If the GPU can't store all of our data, re-create the GPU buffers so they can
         if vertex_length > self.vertex_length {
+            eprintln!("### vertex_length new={:?} was={:?}", vertex_length, self.vertex_length);
             self.vertex_length = vertex_length * 2;
             // Create strings for all of the shader attributes
             let position_string = CString::new("position").expect("No interior null bytes in shader").into_raw();
@@ -233,6 +234,7 @@ impl Backend for GL3Backend {
             gl::VertexAttribPointer(use_texture_attrib, 1, gl::FLOAT, gl::FALSE, stride_distance, (8 * size_of::<f32>()) as *const c_void);
 
             self.texture_location = gl::GetUniformLocation(self.shader, tex_string as *const i8);
+            eprintln!("### location={:?} shader={:?}", self.texture_location, self.shader);
             // Make sure to deallocate the attribute strings
             CString::from_raw(position_string);
             CString::from_raw(tex_coord_string);
@@ -267,7 +269,7 @@ impl Backend for GL3Backend {
             let index_length = size_of::<u32>() * self.indices.len();
             let index_data = self.indices.as_ptr() as *const c_void;
             if index_length > self.index_length {
-                eprintln!("index_length={:?} was={:?}", index_length, self.index_length);
+                eprintln!("### index_length new={:?} was={:?}", index_length, self.index_length);
                 self.index_length = index_length * 2;
                 gl::BufferData(gl::ELEMENT_ARRAY_BUFFER, self.index_length as isize, nullptr(), gl::STREAM_DRAW);
             }
@@ -297,8 +299,8 @@ impl Backend for GL3Backend {
             gl::GenTextures(1, &mut texture as *mut u32);
             texture
         };
-        eprintln!("Created texture id={} width x={:?} y={:?}", id, width, height);
-        gl::ActiveTexture(gl::TEXTURE0 as u32);
+        eprintln!("### Created texture id={} width={:?} height={:?}", id, width, height);
+        // gl::ActiveTexture(gl::TEXTURE0 as u32);
         gl::BindTexture(gl::TEXTURE_2D, id);  // WARN: Enabling this makes draw_tasks fail
         gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::CLAMP_TO_EDGE as i32);
         gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::CLAMP_TO_EDGE as i32);
@@ -424,7 +426,7 @@ impl Backend for GL3Backend {
                 texture
             };
 
-            eprintln!("Created texture with id={:?}", texture_id);
+            eprintln!(">>> Created texture with id={:?}", texture_id);
 
             // Create a no-op serializer function
             let serializer = |_vertex| -> Vec<f32> {
@@ -559,6 +561,7 @@ impl Backend for GL3Backend {
                 return;
             }
             let texture = &self.tex_units[task.texture_idx];
+            eprintln!("draw_tasks for idx={:?} texture_id={:?}", task.texture_idx, texture.texture_id);
             let idx = task.texture_idx as u32;
             let mut vertices: Vec<f32> = Vec::new();
             let mut indices: Vec<u32> = Vec::new();
@@ -584,11 +587,12 @@ impl Backend for GL3Backend {
             let index_data = indices.as_ptr() as *const c_void;
 
             // eprintln!("vertex_length={:?} index_length={:?}", vertex_length, index_length);
-            gl::BufferData(gl::ARRAY_BUFFER, vertex_length as isize, vertex_data, gl::DYNAMIC_DRAW);
-            gl::BufferData(gl::ELEMENT_ARRAY_BUFFER, index_length as isize, index_data, gl::DYNAMIC_DRAW);
+            gl::BufferSubData(gl::ARRAY_BUFFER, 0, vertex_length as isize, vertex_data);
+            gl::BufferSubData(gl::ELEMENT_ARRAY_BUFFER, 0, index_length as isize, index_data);
 
             // Draw the triangles
             gl::DrawElements(gl::TRIANGLES, indices.len() as i32, gl::UNSIGNED_INT, nullptr());
+            gl::ActiveTexture(gl::TEXTURE0);
         }
     }
 }
