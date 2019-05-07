@@ -2,7 +2,7 @@ use crate::{
     Result,
     backend::{Backend, BackendImpl, ImageData, instance, set_instance},
     geom::{Rectangle, Scalar, Transform, Vector},
-    graphics::{Background, BlendMode, Color, Drawable, DrawTask, Mesh, PixelFormat, ResizeStrategy, View},
+    graphics::{Background, BlendMode, Color, Drawable, DrawTask, Mesh, PixelFormat, ResizeStrategy, Texture, View},
     input::{ButtonState, Gamepad, Keyboard, Mouse, MouseCursor},
     lifecycle::{Event, Settings},
 };
@@ -345,6 +345,8 @@ impl Window {
     pub fn flush(&mut self) -> Result<()> {
         self.mesh.triangles.sort();
 
+        // let mut mesh_tasks = self.parse_mesh_tasks(&self.mesh);
+        // self.draw_tasks.append(&mut mesh_tasks);
         // Create DrawTask with texture_idx = 0, which is the default TextureUnit
         let mut draw_task = DrawTask::new(0);
         draw_task.vertices.append(&mut self.mesh.vertices);
@@ -364,6 +366,51 @@ impl Window {
         self.mesh.clear();
         self.draw_tasks.clear();
         Ok(())
+    }
+    /// This is a temporary function for separating the batches vertices and indices
+    /// in Mesh into individual DrawTasks
+    fn parse_mesh_tasks(&self, mesh: &Mesh) -> Vec<DrawTask> {
+        let mut tasks: Vec<DrawTask> = Vec::new();
+        let mut last_id: Option<u32> = None;
+        let mut task = DrawTask::new(0);
+        let mut offset: u32 = 0;
+        // Now process queued triangles
+        for triangle in mesh.triangles.iter() {
+            let img_id: Option<u32> = {
+                if let Some(ref img) = triangle.image {
+                    Some(img.get_id())
+                } else {
+                    None
+                }
+            };
+            if img_id != last_id {
+                last_id = img_id;
+                offset = triangle.indices[0];
+                if task.vertices.len() > 0 {
+                    tasks.push(task);
+                }
+                // New DrawTask to hold copied vertices and indices
+                task = DrawTask::new(0);
+                task.texture_id = img_id;
+            }
+            for index in triangle.indices.iter() {
+                // Copy each vertex over
+                task.vertices.push(mesh.vertices[*index as usize].clone());
+            }
+            let mut triangle = triangle.clone();
+            let mut indices = triangle.indices.clone();
+            // if indices.iter().min().unwrap() > &offset {
+                indices = [indices[0] - offset, indices[1] - offset,  indices[2] - offset];
+                triangle.indices = indices;
+                task.triangles.push(triangle);
+            // }
+            // self.indices.extend(triangle.indices.iter());
+        }
+        for task in &tasks {
+            eprintln!("vertices={:?} indices={:?}", task.vertices.len(), task.triangles.len());
+        }
+
+        tasks
     }
 
     /// Set the blend mode for the window
@@ -534,6 +581,13 @@ impl Window {
 
     pub(crate) fn backend(&mut self) -> &'static mut BackendImpl {
         unsafe { instance() }
+    }
+
+    /// Given a Texture object, create and register a TextureUnit in the backend.texture_units array
+    /// Return the index value to reference this TextureUnit. See the new() constructor in GL3Backend for an
+    /// example on usage, where the default texture is created and saved.
+    pub fn create_texture_unit(&mut self, texture: &Texture) -> Result<(usize)> {
+        self.backend().create_texture_unit(texture)
     }
 
     /// Passthru method to access the backend OpenGL/WebGL method

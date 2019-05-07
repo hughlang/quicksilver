@@ -1,7 +1,7 @@
 use crate::{
     Result,
     geom::{Rectangle, Vector},
-    graphics::{Background::Col, BlendMode, Color, DrawTask, GpuTriangle, Image, ImageScaleStrategy, PixelFormat, Surface, Vertex},
+    graphics::{Background::Col, BlendMode, Color, DrawTask, GpuTriangle, Image, ImageScaleStrategy, PixelFormat, Surface, Texture, Vertex},
     input::MouseCursor,
 };
 
@@ -20,6 +20,7 @@ pub(crate) trait Backend {
     unsafe fn create_texture(&mut self, data: &[u8], width: u32, height: u32, format: PixelFormat) -> Result<ImageData>;
     unsafe fn destroy_texture(&mut self, data: &mut ImageData);
 
+    fn create_texture_unit(&mut self, texture: &Texture) -> Result<(usize)>;
     fn prepare_texture(&mut self, vertex_shader: &str, fragment_shader: &str) -> Result<usize>;
     fn upload_texture(&mut self, idx: usize, data: &[u8], width: u32, height: u32, format: PixelFormat) -> Result<()>;
     fn update_texture(&mut self, idx: usize, data: &[u8], rect: &Rectangle, format: PixelFormat) -> Result<()>;

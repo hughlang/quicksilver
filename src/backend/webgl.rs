@@ -3,7 +3,7 @@ use crate::{
     backend::{Backend, ImageData, SurfaceData, VERTEX_SIZE},
     geom::{Rectangle, Vector},
     error::QuicksilverError,
-    graphics::{BlendMode, Color, DrawTask, GpuTriangle, Image, ImageScaleStrategy, PixelFormat, Surface, Vertex},
+    graphics::{BlendMode, Color, DrawTask, GpuTriangle, Image, ImageScaleStrategy, PixelFormat, Surface, Texture, Vertex},
     input::MouseCursor,
 };
 use std::{
@@ -367,6 +367,11 @@ impl Backend for WebGLBackend {
         self.canvas.set_height(size.y as u32);
     }
 
+    fn create_texture_unit(&mut self, texture: &Texture) -> Result<(usize)> {
+
+        Ok(0)
+    }
+
     fn prepare_texture(&mut self, vertex_shader: &str, fragment_shader: &str) -> Result<usize> {
         unsafe {
             let vertex_id = self.compile_shader(vertex_shader, gl::VERTEX_SHADER)?;
@@ -430,7 +435,7 @@ impl Backend for WebGLBackend {
         Ok(())
     }
 
-    fn configure_fields<CB>(&mut self, idx: usize, fields: &Vec<(String, u32)>, cb: CB, out_color: &str, tex_name: &str) -> Result<()>
+    fn configure_texture<CB>(&mut self, idx: usize, fields: &Vec<(String, u32)>, cb: CB, out_color: &str, tex_name: &str) -> Result<()>
     where CB: Fn(Vertex) -> Vec<f32> + 'static
     {
         if idx >= self.tex_units.len() {

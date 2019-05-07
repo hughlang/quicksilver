@@ -2,7 +2,8 @@
 ///
 ///
 use crate::{
-    backend::Backend,
+    Result,
+    backend::{Backend, instance},
     graphics::{GpuTriangle, PixelFormat, Vertex},
     lifecycle::Window,
 };
@@ -17,8 +18,6 @@ use crate::{
 /// different shader programs and expected outputs.
 // #[derive(Clone)]
 pub struct Texture {
-    /// The index value for looking up the TextureUnit in the GL backend
-    pub texture_idx: usize,
     /// The glsl code for the vertex shader
     pub vertex_shader: String,
     /// The glsl code for the fragment shader
@@ -39,7 +38,6 @@ impl Default for Texture {
             Vec::new()
         };
         Texture {
-            texture_idx: 0,
             vertex_shader: String::default(),
             fragment_shader: String::default(),
             fields: Vec::new(),
@@ -66,16 +64,13 @@ impl Texture {
         self.fields = fields.iter().map(|(s, n)| (s.to_string(), n.clone())).collect();
         self.out_color = out_color.to_string();
         self.sampler = sampler.to_string();
+        self.serializer = Box::new(cb);
         self
     }
 
     /// Final builder method in the constructor chaine
-    pub fn build(self, data: &[u8], width: u32, height: u32, format: PixelFormat, window: &mut Window) -> Self {
-        let result = window.backend().upload_texture(self.texture_idx, data, width, height, format);
-        if result.is_err() {
-            eprintln!("ERROR={:?}", result);
-        }
-        self
+    pub fn upload(&self, idx: usize, data: &[u8], width: u32, height: u32, format: PixelFormat, window: &mut Window) -> Result<()> {
+        window.backend().upload_texture(idx, data, width, height, format)
     }
 }
 
@@ -84,8 +79,10 @@ impl Texture {
 /// and flush stages
 #[derive(Clone)]
 pub struct DrawTask {
-    /// The id value matching the Texture registered in backend.textures_map
+    /// The index value of the TextureUnit in backend.texture_units
     pub texture_idx: usize,
+    /// Optional texture_id for convenience. Not compatible with webgl though
+    pub texture_id: Option<u32>,
     /// All the vertices in the task
     pub vertices: Vec<Vertex>,
     /// All the triangles in the task
@@ -97,6 +94,7 @@ impl DrawTask {
     pub fn new(id: usize) -> Self {
         DrawTask {
             texture_idx: id,
+            texture_id: None,
             vertices: Vec::new(),
             triangles: Vec::new(),
         }
