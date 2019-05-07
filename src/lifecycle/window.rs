@@ -344,9 +344,13 @@ impl Window {
     /// Note that calling this can be an expensive operation
     pub fn flush(&mut self) -> Result<()> {
         self.mesh.triangles.sort();
-        for vertex in self.mesh.vertices.iter_mut() {
-            vertex.pos = self.view.opengl * vertex.pos;
-        }
+
+        // Create DrawTask with texture_idx = 0, which is the default TextureUnit
+        let mut draw_task = DrawTask::new(0);
+        draw_task.vertices.append(&mut self.mesh.vertices);
+        draw_task.triangles.append(&mut self.mesh.triangles);
+        self.draw_tasks.push(draw_task);
+
         for task in self.draw_tasks.iter_mut() {
             for vertex in task.vertices.iter_mut() {
                 vertex.pos = self.view.opengl * vertex.pos;
@@ -354,8 +358,8 @@ impl Window {
         }
 
         unsafe {
-            self.backend().draw(self.mesh.vertices.as_slice(), self.mesh.triangles.as_slice())?;
             self.backend().draw_tasks(&self.draw_tasks);
+            self.backend().reset_blend_mode();
         }
         self.mesh.clear();
         self.draw_tasks.clear();

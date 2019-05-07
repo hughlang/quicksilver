@@ -3,7 +3,6 @@
 ///
 use crate::{
     backend::Backend,
-    geom::Rectangle,
     graphics::{GpuTriangle, PixelFormat, Vertex},
     lifecycle::Window,
 };
@@ -20,8 +19,10 @@ use crate::{
 pub struct Texture {
     /// The index value for looking up the TextureUnit in the GL backend
     pub texture_idx: usize,
-    /// The width and height
-    // pub size: Vector,
+    /// The glsl code for the vertex shader
+    pub vertex_shader: String,
+    /// The glsl code for the fragment shader
+    pub fragment_shader: String,
     /// List of name and field width values
     pub fields: Vec<(String, u32)>,
     /// Identifies the name of the fragment shader variable for the output color
@@ -39,6 +40,8 @@ impl Default for Texture {
         };
         Texture {
             texture_idx: 0,
+            vertex_shader: String::default(),
+            fragment_shader: String::default(),
             fields: Vec::new(),
             out_color: String::default(),
             sampler: String::default(),
@@ -50,32 +53,19 @@ impl Default for Texture {
 impl Texture {
 
     /// Initialize both shaders using the provided strings which contain OpenGL/WebGL code
-    pub fn with_shaders(mut self, vertex_shader: &str, fragment_shader: &str, window: &mut Window) -> Self {
-        let result = window.backend().prepare_texture(vertex_shader, fragment_shader);
-        if result.is_ok() {
-            self.texture_idx = result.unwrap();
-        } else {
-            eprintln!("ERROR={:?}", result);
-        }
+    pub fn with_shaders(mut self, vertex_shader: &str, fragment_shader: &str) -> Self {
+        self.vertex_shader = vertex_shader.to_string();
+        self.fragment_shader = fragment_shader.to_string();
         self
     }
 
     /// Set the fields that match the shader program inputs
-    pub fn with_fields<CB>(mut self, fields: &[(&str, u32)], cb: CB, out_color: &str, sampler: &str, window: &mut Window) -> Self
+    pub fn with_fields<CB>(mut self, fields: &[(&str, u32)], cb: CB, out_color: &str, sampler: &str) -> Self
     where CB: Fn(Vertex) -> Vec<f32> + 'static
     {
         self.fields = fields.iter().map(|(s, n)| (s.to_string(), n.clone())).collect();
         self.out_color = out_color.to_string();
         self.sampler = sampler.to_string();
-        let _ = window.backend().configure_texture(self.texture_idx, &self.fields, cb, out_color, sampler);
-        self
-    }
-
-    /// Set the serializer function to convert Vertex data into a stream of floats
-    pub fn with_serializer<C>(mut self, cb: C) -> Self
-    where C: Fn(Vertex) -> Vec<f32> + 'static,
-    {
-        self.serializer = Box::new(cb);
         self
     }
 
@@ -86,14 +76,6 @@ impl Texture {
             eprintln!("ERROR={:?}", result);
         }
         self
-    }
-
-    /// Update the texture given an array of data, rect, and PixelFormat
-    pub fn update_texture(&mut self, data: &[u8], rect: &Rectangle, format: PixelFormat, window: &mut Window) {
-        let result = window.backend().update_texture(self.texture_idx, data, rect, format);
-        if result.is_err() {
-            eprintln!("ERROR={:?}", result);
-        }
     }
 }
 
