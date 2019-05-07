@@ -11,7 +11,8 @@ use glutin::{WindowedContext, dpi::LogicalSize};
 use std::{
     ffi::{CStr, CString},
     mem::size_of,
-    os::raw::{c_void, c_char},
+    ops::Range,
+    os::raw::c_void,
     ptr::{self, null as nullptr},
     str,
 };
@@ -213,6 +214,7 @@ impl Backend for GL3Backend {
 
     // TODO: Deprecate. Replaced with draw_tasks
     unsafe fn draw(&mut self, vertices: &[Vertex], triangles: &[GpuTriangle]) -> Result<()> {
+        // println!("### GL3 draw");
         // Turn the provided vertex data into stored vertex data
         vertices.iter().for_each(|vertex| {
             self.vertices.push(vertex.pos.x);
@@ -266,8 +268,6 @@ impl Backend for GL3Backend {
             CString::from_raw(use_texture_string);
             // gl_assert_ok!();
         }
-        self.reset_blend_mode();
-
         let vertex_data = self.vertices.as_ptr() as *const c_void;
         gl::BufferSubData(gl::ARRAY_BUFFER, 0, vertex_length as isize, vertex_data);
         // gl_assert_ok!();
@@ -292,6 +292,7 @@ impl Backend for GL3Backend {
 
     // TODO: Deprecate. Replaced with draw_tasks
     unsafe fn flush(&mut self) {
+        // println!("### GL3 flush");
         if self.indices.len() != 0 {
             // Check if the index buffer is big enough and upload the data
             let index_length = size_of::<u32>() * self.indices.len();
@@ -509,8 +510,10 @@ impl Backend for GL3Backend {
 
             let raw = CString::new(tex_name).expect("No tex").into_raw();
             let location = gl::GetUniformLocation(program_id, raw as *const i8);
+            if location >= 0 {
+                self.tex_units[idx].location_id = location;
+            }
             // gl::Uniform1i(location, idx as i32);
-            self.tex_units[idx].location_id = location;
             eprintln!(">>> texture location={:?} for program_id={:?}", location, program_id);
 
             let float_size = size_of::<f32>() as u32;
@@ -542,7 +545,7 @@ impl Backend for GL3Backend {
             }
             let raw = CString::new(out_color).expect("No interior null bytes in shader").into_raw();
             eprintln!("configure_fields program_id={:?} color key={:?}", program_id, out_color);
-            gl::BindFragDataLocation(program_id, 0, raw as *mut i8);
+            gl::BindFragDataLocation(program_id, idx as u32, raw as *mut i8);
             CString::from_raw(raw);
             gl_assert_ok!();
             Ok(())
@@ -609,7 +612,7 @@ impl Backend for GL3Backend {
     /// The logic in this method handles the overly complex situation where all of the vertices and triangles
     /// that were accumulated in Mesh are batched together.
     unsafe fn draw_tasks(&mut self, tasks: &Vec<DrawTask>) {
-        for (i, task) in tasks.iter().enumerate() {
+        for (_, task) in tasks.iter().enumerate() {
 
             if task.texture_idx >= self.tex_units.len() {
                 eprintln!("Texture index {} out of bounds for len={}", task.texture_idx, self.tex_units.len());
@@ -634,55 +637,110 @@ impl Backend for GL3Backend {
             }
             gl::BufferSubData(gl::ARRAY_BUFFER, 0, vertex_length as isize, vertex_data);
 
-            let texture_id: u32 = task.texture_id.unwrap_or(1);
-            // let texture_id = {
-            //     if task.triangles.len() > 0 {
-            //         println!(">>> task.triangles.len() > 0");
+            if task.texture_idx == 0 {
+                // eprintln!(">>> batch triangles count={:?} id={:?}", &task.triangles.len(), texture.texture_id);
 
-            //         if let Some(img) = &task.triangles[0].image {
-            //             eprintln!("Found image id={:?} for task# {:?}", img.get_id(), i);
-            //             img.get_id()
-            //         } else {
-            //             println!(">>> task.triangles[0].image is None");
-            //             texture.texture_id
-            //         }
-            //     } else {
-            //         println!(">>> task.triangles.len() = 0");
-            //         texture.texture_id
-            //     }
-            // };
-            eprintln!(">>> draw_tasks for idx={:?} texture_id={:?}", task.texture_idx, texture_id);
-            let idx = task.texture_idx as u32;
-            let mut indices: Vec<u32> = Vec::new();
-            gl::ActiveTexture(gl::TEXTURE0 + idx);
-            gl::BindTexture(gl::TEXTURE_2D, texture_id);
-            gl::Enable(gl::TEXTURE_2D);
-            // gl::Uniform1i(texture.location_id, idx as i32);
+                let mut ranges: Vec<(Option<u32>, Range<usize>)> = Vec::new();
+                let mut last_id: Option<u32> = None;
+                let mut range_start: usize = 0;
+                for (i, triangle) in task.triangles.iter().enumerate() {
+                    let img_id: Option<u32> = {
+                        if let Some(ref img) = triangle.image {
+                            Some(img.get_id())
+                        } else {
+                            None
+                        }
+                    };
+                    if img_id != last_id {
+                        // eprintln!("img_id changed new={:?} was={:?}", img_id, last_id);
+                        let range: Range<usize> = range_start..i;
+                        ranges.push((last_id, range));
+                        range_start = i;
+                        last_id = img_id;
+                    }
+                }
+                let range: Range<usize> = range_start..task.triangles.len();
+                ranges.push((last_id, range));
 
+                for data in &ranges {
+                    let range = data.1.clone();
+                    // eprintln!("id={:?} range={:?}", &data.0, &range);
+                    let mut indices: Vec<u32> = Vec::new();
+                    // let triangles = task.triangles[data.1];
+                    let texture_id: u32 = {
+                        if let Some(id) = data.0 {
+                            id
+                        } else {
+                            texture.texture_id
+                        }
+                    };
 
-            for triangle in &task.triangles {
-                indices.extend_from_slice(&triangle.indices);
+                    // eprintln!(">>> draw_tasks for idx={:?} texture_id={:?}", task.texture_idx, texture_id);
+                    let idx = task.texture_idx as u32;
+                    // gl::ActiveTexture(gl::TEXTURE0 + idx);
+                    gl::BindTexture(gl::TEXTURE_2D, texture_id);
+                    gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, self.texture_mode as i32);
+                    gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, self.texture_mode as i32);
+
+                    gl::Enable(gl::TEXTURE_2D);
+                    gl::Uniform1i(texture.location_id, idx as i32);
+                    for triangle in &task.triangles[range] {
+                        // eprintln!("add indices={:?} range={:?}", &triangle.indices, data.1.clone());
+                        indices.extend_from_slice(&triangle.indices);
+                    }
+
+                    let index_length = size_of::<u32>() * indices.len();
+                    let index_data = indices.as_ptr() as *const c_void;
+                    // If the GPU can't store all of our data, re-create the GPU buffers so they can
+                    if index_length > self.index_length {
+                        eprintln!(">>> index_length new={:?} was={:?}", index_length, self.index_length);
+                        self.index_length = index_length * 2;
+                        gl::BufferData(gl::ELEMENT_ARRAY_BUFFER, self.index_length as isize, nullptr(), gl::STREAM_DRAW);
+                    }
+
+                    // eprintln!("vertex_length={:?} index_length={:?}", vertex_length, index_length);
+                    gl::BufferSubData(gl::ELEMENT_ARRAY_BUFFER, 0, index_length as isize, index_data);
+
+                    // Draw the triangles
+                    gl::DrawElements(gl::TRIANGLES, indices.len() as i32, gl::UNSIGNED_INT, nullptr());
+                }
+            } else {
+                let texture_id = texture.texture_id;
+                let idx = task.texture_idx as u32;
+                // gl::ActiveTexture(gl::TEXTURE0 + idx);
+                gl::BindTexture(gl::TEXTURE_2D, texture_id);
+                gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, self.texture_mode as i32);
+                gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, self.texture_mode as i32);
+                gl::Enable(gl::TEXTURE_2D);
+                gl::Uniform1i(texture.location_id, idx as i32);
+
+                let mut indices: Vec<u32> = Vec::new();
+                for triangle in &task.triangles {
+                    indices.extend_from_slice(&triangle.indices);
+                }
+
+                // eprintln!(">>> glyph triangles count={:?} id={:?}", &task.triangles.len(), texture_id);
+                for triangle in &task.triangles {
+                    indices.extend_from_slice(&triangle.indices);
+                }
+
+                let index_length = size_of::<u32>() * indices.len();
+                let index_data = indices.as_ptr() as *const c_void;
+                // If the GPU can't store all of our data, re-create the GPU buffers so they can
+                if index_length > self.index_length {
+                    eprintln!(">>> index_length new={:?} was={:?}", index_length, self.index_length);
+                    self.index_length = index_length * 2;
+                    gl::BufferData(gl::ELEMENT_ARRAY_BUFFER, self.index_length as isize, nullptr(), gl::STREAM_DRAW);
+                }
+
+                // eprintln!("vertex_length={:?} index_length={:?}", vertex_length, index_length);
+                gl::BufferSubData(gl::ELEMENT_ARRAY_BUFFER, 0, index_length as isize, index_data);
+
+                // Draw the triangles
+                gl::DrawElements(gl::TRIANGLES, indices.len() as i32, gl::UNSIGNED_INT, nullptr());
+
             }
 
-
-            let index_length = size_of::<u32>() * indices.len();
-            let index_data = indices.as_ptr() as *const c_void;
-
-            // eprintln!(">>> vertex_length={:?} vs. global={:?}", vertex_length, self.vertex_length);
-
-            // If the GPU can't store all of our data, re-create the GPU buffers so they can
-            if index_length > self.index_length {
-                eprintln!(">>> index_length new={:?} was={:?}", index_length, self.index_length);
-                self.index_length = index_length * 2;
-                gl::BufferData(gl::ELEMENT_ARRAY_BUFFER, self.index_length as isize, nullptr(), gl::STREAM_DRAW);
-            }
-
-            // eprintln!("vertex_length={:?} index_length={:?}", vertex_length, index_length);
-            gl::BufferSubData(gl::ELEMENT_ARRAY_BUFFER, 0, index_length as isize, index_data);
-
-            // Draw the triangles
-            gl::DrawElements(gl::TRIANGLES, indices.len() as i32, gl::UNSIGNED_INT, nullptr());
-            // gl::ActiveTexture(gl::TEXTURE0);
         }
     }
 }
@@ -690,35 +748,38 @@ impl Backend for GL3Backend {
 impl GL3Backend {
 
     /// Returns the u32 id value of the compiled shader
-    unsafe fn compile_shader(&self, src: &str, stype: u32) -> Result<u32> {
-        let shader = gl::CreateShader(stype);
-        gl_assert_ok!();
-        // Attempt to compile the shader
-        let c_str = CString::new(src.as_bytes()).expect("No interior null bytes in shader").into_raw();
-        gl::ShaderSource(shader, 1, &(c_str as *const i8) as *const *const i8, nullptr());
-        CString::from_raw(c_str);
-        gl::CompileShader(shader);
-        gl_assert_ok!();
+    fn compile_shader(&self, src: &str, stype: GLenum) -> Result<u32> {
+        let shader;
+        unsafe {
+            shader = gl::CreateShader(stype);
+            gl_assert_ok!();
+            // Attempt to compile the shader
+            let c_str = CString::new(src.as_bytes()).expect("No interior null bytes in shader").into_raw();
+            gl::ShaderSource(shader, 1, &(c_str as *const i8) as *const *const i8, nullptr());
+            CString::from_raw(c_str);
+            gl::CompileShader(shader);
+            gl_assert_ok!();
 
-        // Get the compile status
-        let mut status = GLint::from(gl::FALSE);
-        gl::GetShaderiv(shader, gl::COMPILE_STATUS, &mut status);
+            // Get the compile status
+            let mut status = GLint::from(gl::FALSE);
+            gl::GetShaderiv(shader, gl::COMPILE_STATUS, &mut status);
 
-        // Fail on error
-        if status != GLint::from(gl::TRUE) {
-            let mut len = 0;
-            gl::GetShaderiv(shader, gl::INFO_LOG_LENGTH, &mut len);
-            let mut buf = Vec::with_capacity(len as usize);
-            buf.set_len((len as usize) - 1); // subtract 1 to skip the trailing null character
-            gl::GetShaderInfoLog(
-                shader,
-                len,
-                ptr::null_mut(),
-                buf.as_mut_ptr() as *mut GLchar,
-            );
-            return Err(QuicksilverError::ContextError(String::from_utf8(buf).unwrap()));
+            // Fail on error
+            if status != GLint::from(gl::TRUE) {
+                let mut len = 0;
+                gl::GetShaderiv(shader, gl::INFO_LOG_LENGTH, &mut len);
+                let mut buf = Vec::with_capacity(len as usize);
+                buf.set_len((len as usize) - 1); // subtract 1 to skip the trailing null character
+                gl::GetShaderInfoLog(
+                    shader,
+                    len,
+                    ptr::null_mut(),
+                    buf.as_mut_ptr() as *mut GLchar,
+                );
+                return Err(QuicksilverError::ContextError(String::from_utf8(buf).unwrap()));
+            }
+            gl_assert_ok!();
         }
-        gl_assert_ok!();
         Ok(shader)
     }
 

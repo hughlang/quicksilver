@@ -345,14 +345,14 @@ impl Window {
     pub fn flush(&mut self) -> Result<()> {
         self.mesh.triangles.sort();
 
-        let mut mesh_tasks = self.parse_mesh_tasks(&self.mesh);
-        self.draw_tasks.append(&mut mesh_tasks);
+        // let mut mesh_tasks = self.parse_mesh_tasks(&self.mesh);
+        // self.draw_tasks.append(&mut mesh_tasks);
 
         // Create DrawTask with texture_idx = 0, which is the default TextureUnit
-        // let mut draw_task = DrawTask::new(0);
-        // draw_task.vertices.append(&mut self.mesh.vertices);
-        // draw_task.triangles.append(&mut self.mesh.triangles);
-        // self.draw_tasks.push(draw_task);
+        let mut draw_task = DrawTask::new(0);
+        draw_task.vertices.append(&mut self.mesh.vertices);
+        draw_task.triangles.append(&mut self.mesh.triangles);
+        self.draw_tasks.push(draw_task);
 
         for task in self.draw_tasks.iter_mut() {
             for vertex in task.vertices.iter_mut() {
@@ -367,52 +367,6 @@ impl Window {
         self.mesh.clear();
         self.draw_tasks.clear();
         Ok(())
-    }
-    /// This is a temporary function for separating the batches vertices and indices
-    /// in Mesh into individual DrawTasks
-    fn parse_mesh_tasks(&self, mesh: &Mesh) -> Vec<DrawTask> {
-        let mut tasks: Vec<DrawTask> = Vec::new();
-        let mut last_id: Option<u32> = None;
-        let mut task = DrawTask::new(0);
-        let mut offset: u32 = 0;
-        // Now process queued triangles
-        for triangle in mesh.triangles.iter() {
-            let img_id: Option<u32> = {
-                if let Some(ref img) = triangle.image {
-                    Some(img.get_id())
-                } else {
-                    None
-                }
-            };
-            if img_id != last_id {
-                eprintln!("img_id changed new={:?} was={:?}", img_id, last_id);
-                last_id = img_id;
-                offset = triangle.indices[0];
-                if task.vertices.len() > 0 {
-                    tasks.push(task);
-                }
-                // New DrawTask to hold copied vertices and indices
-                task = DrawTask::new(0);
-                task.texture_id = img_id;
-            }
-            for index in triangle.indices.iter() {
-                // Copy each vertex over
-                let vertex = mesh.vertices[*index as usize].clone();
-                eprintln!("Copying vertex: index={:?} y={:?}", index, vertex);
-                task.vertices.push(vertex);
-            }
-            let mut t = triangle.clone();
-            // let mut indices = triangle.indices.clone();
-            // if indices.iter().min().unwrap() > &offset {
-            t.indices = [t.indices[0] - offset, t.indices[1] - offset,  t.indices[2] - offset];
-            eprintln!("Update indices as {:?} offset={:?}", t.indices, offset);
-            task.triangles.push(t);
-            // }
-            // self.indices.extend(triangle.indices.iter());
-        }
-        tasks.push(task);
-
-        tasks
     }
 
     /// Set the blend mode for the window
