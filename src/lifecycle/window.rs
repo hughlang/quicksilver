@@ -345,13 +345,14 @@ impl Window {
     pub fn flush(&mut self) -> Result<()> {
         self.mesh.triangles.sort();
 
-        // let mut mesh_tasks = self.parse_mesh_tasks(&self.mesh);
-        // self.draw_tasks.append(&mut mesh_tasks);
+        let mut mesh_tasks = self.parse_mesh_tasks(&self.mesh);
+        self.draw_tasks.append(&mut mesh_tasks);
+
         // Create DrawTask with texture_idx = 0, which is the default TextureUnit
-        let mut draw_task = DrawTask::new(0);
-        draw_task.vertices.append(&mut self.mesh.vertices);
-        draw_task.triangles.append(&mut self.mesh.triangles);
-        self.draw_tasks.push(draw_task);
+        // let mut draw_task = DrawTask::new(0);
+        // draw_task.vertices.append(&mut self.mesh.vertices);
+        // draw_task.triangles.append(&mut self.mesh.triangles);
+        // self.draw_tasks.push(draw_task);
 
         for task in self.draw_tasks.iter_mut() {
             for vertex in task.vertices.iter_mut() {
@@ -384,6 +385,7 @@ impl Window {
                 }
             };
             if img_id != last_id {
+                eprintln!("img_id changed new={:?} was={:?}", img_id, last_id);
                 last_id = img_id;
                 offset = triangle.indices[0];
                 if task.vertices.len() > 0 {
@@ -395,20 +397,20 @@ impl Window {
             }
             for index in triangle.indices.iter() {
                 // Copy each vertex over
-                task.vertices.push(mesh.vertices[*index as usize].clone());
+                let vertex = mesh.vertices[*index as usize].clone();
+                eprintln!("Copying vertex: index={:?} y={:?}", index, vertex);
+                task.vertices.push(vertex);
             }
-            let mut triangle = triangle.clone();
-            let mut indices = triangle.indices.clone();
+            let mut t = triangle.clone();
+            // let mut indices = triangle.indices.clone();
             // if indices.iter().min().unwrap() > &offset {
-                indices = [indices[0] - offset, indices[1] - offset,  indices[2] - offset];
-                triangle.indices = indices;
-                task.triangles.push(triangle);
+            t.indices = [t.indices[0] - offset, t.indices[1] - offset,  t.indices[2] - offset];
+            eprintln!("Update indices as {:?} offset={:?}", t.indices, offset);
+            task.triangles.push(t);
             // }
             // self.indices.extend(triangle.indices.iter());
         }
-        for task in &tasks {
-            eprintln!("vertices={:?} indices={:?}", task.vertices.len(), task.triangles.len());
-        }
+        tasks.push(task);
 
         tasks
     }
