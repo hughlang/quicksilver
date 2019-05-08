@@ -352,7 +352,7 @@ impl Window {
         let mut draw_task = DrawTask::new(0);
         draw_task.vertices.append(&mut self.mesh.vertices);
         draw_task.triangles.append(&mut self.mesh.triangles);
-        self.draw_tasks.push(draw_task);
+        self.draw_tasks.insert(0, draw_task);
 
         for task in self.draw_tasks.iter_mut() {
             for vertex in task.vertices.iter_mut() {
