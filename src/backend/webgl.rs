@@ -9,6 +9,7 @@ use crate::{
 use std::{
     collections::HashMap,
     mem::size_of,
+    ops::Range,
 };
 use stdweb::{
     web::{
@@ -47,29 +48,6 @@ pub struct WebGLBackend {
     textures: Vec<Option<WebGLTexture>>,
     tex_units: Vec<TextureUnit>,
 }
-
-const DEFAULT_VERTEX_SHADER: &str = r#"attribute vec2 position;
-attribute vec2 tex_coord;
-attribute vec4 color;
-attribute lowp float uses_texture;
-varying vec2 Tex_coord;
-varying vec4 Color;
-varying lowp float Uses_texture;
-void main() {
-    gl_Position = vec4(position, 0, 1);
-    Tex_coord = tex_coord;
-    Color = color;
-    Uses_texture = uses_texture;
-}"#;
-
-const DEFAULT_FRAGMENT_SHADER: &str = r#"varying highp vec4 Color;
-varying highp vec2 Tex_coord;
-varying lowp float Uses_texture;
-uniform sampler2D tex;
-void main() {
-    highp vec4 tex_color = (int(Uses_texture) != 0) ? texture2D(tex, Tex_coord) : vec4(1, 1, 1, 1);
-    gl_FragColor = Color * tex_color;
-}"#;
 
 fn format_gl(format: PixelFormat) -> u32 {
     match format {
@@ -495,7 +473,120 @@ impl Backend for WebGLBackend {
     }
 
     unsafe fn draw_tasks(&mut self, tasks: &Vec<DrawTask>) {
+        for (_, task) in tasks.iter().enumerate() {
+            if task.texture_idx >= self.tex_units.len() {
+                eprintln!("Texture index {} out of bounds for len={}", task.texture_idx, self.tex_units.len());
+                continue;
+            }
+            let texture = &self.tex_units[task.texture_idx];
 
+            let mut vertices: Vec<f32> = Vec::new();
+            let mut cb = &texture.serializer;
+            for vertex in &task.vertices {
+                let mut verts = (&mut cb)(*vertex);
+                vertices.append(&mut verts);
+            }
+            let vertex_length = size_of::<f32>() * vertices.len();
+            if vertex_length > self.vertex_length {
+                eprintln!(">>> vertex_length new={:?} was={:?}", vertex_length, self.vertex_length);
+                self.vertex_length = vertex_length * 2;
+                // Create the vertex array
+                self.gl_ctx.buffer_data(gl::ARRAY_BUFFER, self.vertex_length as i64, gl::STREAM_DRAW);
+            }
+            // Upload all of the vertex data
+            let array: TypedArray<f32> = vertices.as_slice().into();
+            self.gl_ctx.buffer_sub_data(gl::ARRAY_BUFFER, 0, &array.buffer());
+
+            let mut ranges: Vec<(Option<u32>, Range<usize>)> = Vec::new();
+            if task.texture_idx == 0 {
+                // eprintln!(">>> batch triangles count={:?} id={:?}", &task.triangles.len(), texture.texture_id);
+
+                let mut last_id: Option<u32> = None;
+                let mut range_start: usize = 0;
+                for (i, triangle) in task.triangles.iter().enumerate() {
+                    let img_id: Option<u32> = {
+                        if let Some(ref img) = triangle.image {
+                            Some(img.get_id())
+                        } else {
+                            None
+                        }
+                    };
+                    if img_id != last_id {
+                        // eprintln!("img_id changed new={:?} was={:?}", img_id, last_id);
+                        let range: Range<usize> = range_start..i;
+                        ranges.push((last_id, range));
+                        range_start = i;
+                        last_id = img_id;
+                    }
+                }
+                let range: Range<usize> = range_start..task.triangles.len();
+                ranges.push((last_id, range));
+
+            } else {
+                // let texture_id = texture.texture_id;
+                // let idx = task.texture_idx as u32;
+                // gl::UseProgram(texture.program_id);
+                // gl::ActiveTexture(gl::TEXTURE0 + idx);
+                // gl::BindTexture(gl::TEXTURE_2D, texture_id);
+                // gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::LINEAR as i32);
+                // gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as i32);
+                // // gl::Enable(gl::TEXTURE_2D);
+                // gl::Uniform1i(texture.location_id, idx as i32);
+
+                // let mut indices: Vec<u32> = Vec::new();
+                // for triangle in &task.triangles {
+                //     indices.extend_from_slice(&triangle.indices);
+                // }
+
+                // let index_length = size_of::<u32>() * indices.len();
+                // let index_data = indices.as_ptr() as *const c_void;
+                // // If the GPU can't store all of our data, re-create the GPU buffers so they can
+                // if index_length > self.index_length {
+                //     eprintln!("2>>> index_length new={:?} was={:?}", index_length, self.index_length);
+                //     self.index_length = index_length * 2;
+                //     gl::BufferData(gl::ELEMENT_ARRAY_BUFFER, self.index_length as isize, nullptr(), gl::STREAM_DRAW);
+                // }
+                // gl::BufferSubData(gl::ELEMENT_ARRAY_BUFFER, 0, index_length as isize, index_data);
+                // gl::DrawElements(gl::TRIANGLES, indices.len() as i32, gl::UNSIGNED_INT, nullptr());
+            }
+
+            for data in &ranges {
+                let range = data.1.clone();
+                // eprintln!("id={:?} range={:?}", &data.0, &range);
+                let mut indices: Vec<u32> = Vec::new();
+
+                let idx = task.texture_idx as u32;
+
+                for triangle in &task.triangles[range] {
+                    // eprintln!("add indices={:?} range={:?}", &triangle.indices, data.1.clone());
+                    indices.extend_from_slice(&triangle.indices);
+                }
+
+                let index_length = size_of::<u32>() * indices.len();
+                if index_length > self.index_length {
+                    self.index_length = index_length * 2;
+                    self.gl_ctx.buffer_data(gl::ELEMENT_ARRAY_BUFFER, self.index_length as i64, gl::STREAM_DRAW);
+                }
+
+                let array: TypedArray<u32> = indices.as_slice().into();
+                self.gl_ctx.buffer_sub_data(gl::ELEMENT_ARRAY_BUFFER, 0, &array.buffer());
+                // Upload the texture to the GPU
+                self.gl_ctx.active_texture(gl::TEXTURE0);
+
+                let tex = Some(texture.texture_id.clone());
+                self.gl_ctx.bind_texture(gl::TEXTURE_2D, tex.as_ref());
+                self.gl_ctx.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, self.texture_mode as i32);
+                self.gl_ctx.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, self.texture_mode as i32);
+                match self.texture_location {
+                    Some(ref location) => self.gl_ctx.uniform1i(Some(location), 0),
+                    None => self.gl_ctx.uniform1i(None, 0)
+                }
+                
+                // Draw the triangles
+                self.gl_ctx.draw_elements(gl::TRIANGLES, self.indices.len() as i32, gl::UNSIGNED_INT, 0);
+            }
+
+        }
     }
 }
 
@@ -534,6 +625,29 @@ impl Drop for WebGLBackend {
         self.gl_ctx.delete_buffer(Some(&self.ebo));
     }
 }
+
+const DEFAULT_VERTEX_SHADER: &str = r#"attribute vec2 position;
+attribute vec2 tex_coord;
+attribute vec4 color;
+attribute lowp float uses_texture;
+varying vec2 Tex_coord;
+varying vec4 Color;
+varying lowp float Uses_texture;
+void main() {
+    gl_Position = vec4(position, 0, 1);
+    Tex_coord = tex_coord;
+    Color = color;
+    Uses_texture = uses_texture;
+}"#;
+
+const DEFAULT_FRAGMENT_SHADER: &str = r#"varying highp vec4 Color;
+varying highp vec2 Tex_coord;
+varying lowp float Uses_texture;
+uniform sampler2D tex;
+void main() {
+    highp vec4 tex_color = (int(Uses_texture) != 0) ? texture2D(tex, Tex_coord) : vec4(1, 1, 1, 1);
+    gl_FragColor = Color * tex_color;
+}"#;
 
 const TEX_FIELDS: &[(&str, u32)] = &[
             ("position", 2),

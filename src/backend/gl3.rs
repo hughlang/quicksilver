@@ -612,7 +612,6 @@ impl Backend for GL3Backend {
             let mut cb = &texture.serializer;
             for vertex in &task.vertices {
                 let mut verts = (&mut cb)(*vertex);
-                // eprintln!("### verts={:?} y={:?}", verts, 0);
                 vertices.append(&mut verts);
             }
             let vertex_length = size_of::<f32>() * vertices.len();
