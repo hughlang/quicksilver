@@ -35,9 +35,9 @@ pub struct WebGLBackend {
     indices: Vec<u32>,
     vertex_length: usize,
     index_length: usize,
-    shader: WebGLProgram,
-    fragment: WebGLShader,
-    vertex: WebGLShader,
+    // shader: WebGLProgram,
+    // fragment: WebGLShader,
+    // vertex: WebGLShader,
     vbo: WebGLBuffer,
     ebo: WebGLBuffer,
     texture_location: Option<WebGLUniformLocation>,
@@ -92,11 +92,18 @@ fn try_opt<T>(opt: Option<T>, operation: &str) -> Result<T> {
 }
 
 pub struct TextureUnit {
-    program_id: WebGLProgram,
-    vertex_id: WebGLShader,
-    fragment_id: WebGLShader,
-    texture_id: WebGLTexture,
-    location_id: Option<WebGLUniformLocation>
+    /// The reference returned by glCreateProgram in backend.link_program.
+    pub program_id: WebGLProgram,
+    /// The reference returned by glCreateShader in backend.compile_shader for the vertex shader
+    pub vertex_id: WebGLShader,
+    /// The reference returned by glCreateShader in backend.compile_shader for the fragment shader
+    pub fragment_id: WebGLShader,
+    /// The id value returned by glGenTextures
+    pub texture_id: WebGLTexture,
+    /// The optional Uniform Location
+    pub location_id: Option<WebGLUniformLocation>,
+    /// The serializer function that converts Vertex objects into an array of floats 
+    pub serializer: Box<dyn Fn(Vertex) -> Vec<f32> + 'static>,
 }
 
 impl Backend for WebGLBackend {
@@ -122,20 +129,27 @@ impl Backend for WebGLBackend {
             gl::ONE_MINUS_SRC_ALPHA,
         );
         gl_ctx.enable(gl::BLEND);
-        let vertex = try_opt(gl_ctx.create_shader(gl::VERTEX_SHADER), "Create vertex shader")?;
-        gl_ctx.shader_source(&vertex, DEFAULT_VERTEX_SHADER);
-        gl_ctx.compile_shader(&vertex);
-        let fragment = try_opt(gl_ctx.create_shader(gl::FRAGMENT_SHADER), "Create fragment shader")?;
-        gl_ctx.shader_source(&fragment, DEFAULT_FRAGMENT_SHADER);
-        gl_ctx.compile_shader(&fragment);
-        let shader = try_opt(gl_ctx.create_program(), "Create shader program")?;
-        gl_ctx.attach_shader(&shader, &vertex);
-        gl_ctx.attach_shader(&shader, &fragment);
-        gl_ctx.link_program(&shader);
-        gl_ctx.use_program(Some(&shader));
+
         let initial_width = canvas.width();
         let initial_height = canvas.height();
-        Ok(WebGLBackend {
+
+        // let vertex = try_opt(gl_ctx.create_shader(gl::VERTEX_SHADER), "Create vertex shader")?;
+        // gl_ctx.shader_source(&vertex, DEFAULT_VERTEX_SHADER);
+        // gl_ctx.compile_shader(&vertex);
+        // let fragment = try_opt(gl_ctx.create_shader(gl::FRAGMENT_SHADER), "Create fragment shader")?;
+        // gl_ctx.shader_source(&fragment, DEFAULT_FRAGMENT_SHADER);
+        // gl_ctx.compile_shader(&fragment);
+        // let shader = try_opt(gl_ctx.create_program(), "Create shader program")?;
+        // gl_ctx.attach_shader(&shader, &vertex);
+        // gl_ctx.attach_shader(&shader, &fragment);
+        // gl_ctx.link_program(&shader);
+        // gl_ctx.use_program(Some(&shader));
+
+        let texture = Texture::default()
+            .with_shaders(DEFAULT_VERTEX_SHADER, DEFAULT_FRAGMENT_SHADER)
+            .with_fields(TEX_FIELDS, serialize_vertex, OUT_COLOR, SAMPLER);
+        
+        let mut backend = WebGLBackend {
             canvas,
             gl_ctx,
             texture: None,
@@ -143,14 +157,20 @@ impl Backend for WebGLBackend {
             indices: Vec::with_capacity(1024),
             vertex_length: 0,
             index_length: 0,
-            shader, fragment, vertex, vbo, ebo,
+            vbo, ebo,
             texture_location: None,
             texture_mode,
             initial_width,
             initial_height,
             textures: Vec::new(),
             tex_units: Vec::new(),
-        })
+        };
+
+        let texture_idx = backend.create_texture_unit(&texture)?;
+        let unit = &backend.tex_units[texture_idx];
+        eprintln!("Created default texture_unit idx={:?} texture_id={:?} program_id={:?}", texture_idx, unit.texture_id, unit.program_id);
+
+        Ok(backend)
     }
 
     unsafe fn clear(&mut self, col: Color) {
@@ -174,6 +194,7 @@ impl Backend for WebGLBackend {
     }
 
     unsafe fn draw(&mut self, vertices: &[Vertex], triangles: &[GpuTriangle]) -> Result<()> {
+        // println!("### WebGL draw");
         // Turn the provided vertex data into stored vertex data
         vertices.iter().for_each(|vertex| {
             self.vertices.push(vertex.pos.x);
@@ -190,24 +211,25 @@ impl Backend for WebGLBackend {
         let vertex_length = size_of::<f32>() * self.vertices.len();
         // If the GPU can't store all of our data, re-create the GPU buffers so they can
         if vertex_length > self.vertex_length {
+            let texture = &self.tex_units[0];
             self.vertex_length = vertex_length * 2;
             // Create the vertex array
             self.gl_ctx.buffer_data(gl::ARRAY_BUFFER, self.vertex_length as i64, gl::STREAM_DRAW);
             let stride_distance = (VERTEX_SIZE * size_of::<f32>()) as i32;
             // Set up the vertex attributes
-            let pos_attrib = self.gl_ctx.get_attrib_location(&self.shader, "position") as u32;
+            let pos_attrib = self.gl_ctx.get_attrib_location(&texture.program_id, "position") as u32;
             self.gl_ctx.enable_vertex_attrib_array(pos_attrib);
             self.gl_ctx.vertex_attrib_pointer(pos_attrib, 2, gl::FLOAT, false, stride_distance, 0);
-            let tex_attrib = self.gl_ctx.get_attrib_location(&self.shader, "tex_coord") as u32;
+            let tex_attrib = self.gl_ctx.get_attrib_location(&texture.program_id, "tex_coord") as u32;
             self.gl_ctx.enable_vertex_attrib_array(tex_attrib);
             self.gl_ctx.vertex_attrib_pointer(tex_attrib, 2, gl::FLOAT, false, stride_distance, 2 * size_of::<f32>() as i64);
-            let col_attrib = self.gl_ctx.get_attrib_location(&self.shader, "color") as u32;
+            let col_attrib = self.gl_ctx.get_attrib_location(&texture.program_id, "color") as u32;
             self.gl_ctx.enable_vertex_attrib_array(col_attrib);
             self.gl_ctx.vertex_attrib_pointer(col_attrib, 4, gl::FLOAT, false, stride_distance, 4 * size_of::<f32>() as i64);
-            let use_texture_attrib = self.gl_ctx.get_attrib_location(&self.shader, "uses_texture") as u32;
+            let use_texture_attrib = self.gl_ctx.get_attrib_location(&texture.program_id, "uses_texture") as u32;
             self.gl_ctx.enable_vertex_attrib_array(use_texture_attrib);
             self.gl_ctx.vertex_attrib_pointer(use_texture_attrib, 1, gl::FLOAT, false, stride_distance, 8 * size_of::<f32>() as i64);
-            self.texture_location = Some(try_opt(self.gl_ctx.get_uniform_location(&self.shader, "tex"), "Get texture uniform")?);
+            self.texture_location = Some(try_opt(self.gl_ctx.get_uniform_location(&texture.program_id, "tex"), "Get texture uniform")?);
         }
         // Upload all of the vertex data
         let array: TypedArray<f32> = self.vertices.as_slice().into();
@@ -367,9 +389,14 @@ impl Backend for WebGLBackend {
         self.canvas.set_height(size.y as u32);
     }
 
+    /// Create and register a TextureUnit in self.tex_units given the Texture object which
+    /// contains all of the parameters needed. This does not create or upload a texture, which
+    /// is a secondary step.
     fn create_texture_unit(&mut self, texture: &Texture) -> Result<(usize)> {
+        let texture_idx = self.prepare_texture(&texture.vertex_shader, &texture.fragment_shader)?;
+        self.configure_texture(texture_idx, &texture.fields, serialize_vertex, OUT_COLOR, SAMPLER)?;
 
-        Ok(0)
+        Ok(texture_idx)
     }
 
     fn prepare_texture(&mut self, vertex_shader: &str, fragment_shader: &str) -> Result<usize> {
@@ -379,12 +406,18 @@ impl Backend for WebGLBackend {
             let program_id = self.link_program(&vertex_id, &fragment_id)?;
             let texture_id = try_opt(self.gl_ctx.create_texture(), "Create texture")?;
 
+            // Create a no-op serializer function
+            let serializer = |_vertex| -> Vec<f32> {
+                Vec::new()
+            };
+
             let unit = TextureUnit {
                 program_id,
                 vertex_id,
                 fragment_id,
                 texture_id,
                 location_id: None,
+                serializer: Box::new(serializer),
             };
             self.tex_units.push(unit);
             return Ok(self.tex_units.len() - 1);
@@ -494,10 +527,34 @@ impl Drop for WebGLBackend {
             self.gl_ctx.delete_shader(Some(&texture.fragment_id));
             self.gl_ctx.delete_shader(Some(&texture.vertex_id));
         }
-        self.gl_ctx.delete_program(Some(&self.shader));
-        self.gl_ctx.delete_shader(Some(&self.fragment));
-        self.gl_ctx.delete_shader(Some(&self.vertex));
+        // self.gl_ctx.delete_program(Some(&self.shader));
+        // self.gl_ctx.delete_shader(Some(&self.fragment));
+        // self.gl_ctx.delete_shader(Some(&self.vertex));
         self.gl_ctx.delete_buffer(Some(&self.vbo));
         self.gl_ctx.delete_buffer(Some(&self.ebo));
     }
+}
+
+const TEX_FIELDS: &[(&str, u32)] = &[
+            ("position", 2),
+            ("tex_coord", 2),
+            ("color", 4),
+            ("uses_texture", 1),
+        ];
+const OUT_COLOR: &str = "outColor";
+const SAMPLER: &str = "sampler2D";
+
+fn serialize_vertex(vertex: Vertex) -> Vec<f32> {
+    let mut result: Vec<f32> = Vec::new();
+    result.push(vertex.pos.x);
+    result.push(vertex.pos.y);
+    let tex_pos = vertex.tex_pos.unwrap_or(Vector::ZERO);
+    result.push(tex_pos.x);
+    result.push(tex_pos.y);
+    result.push(vertex.col.r);
+    result.push(vertex.col.g);
+    result.push(vertex.col.b);
+    result.push(vertex.col.a);
+    result.push(if vertex.tex_pos.is_some() { 1f32 } else { 0f32 });
+    result
 }

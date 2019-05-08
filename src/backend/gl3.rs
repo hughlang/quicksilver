@@ -55,14 +55,14 @@ fn gl_err_to_str(err: u32) -> &'static str {
 }
 
 pub struct TextureUnit {
-    /// The id value returned by glGenTextures
-    pub texture_id: u32,
     /// The id returned by glCreateProgram in backend.link_program.
     pub program_id: u32,
     /// The id returned when glCreateShader in backend.compile_shader for the vertex shader
     pub vertex_id: u32,
     /// The id returned when glCreateShader in backend.compile_shader for the fragment shader
     pub fragment_id: u32,
+    /// The id value returned by glGenTextures
+    pub texture_id: u32,
     /// The location
     pub location_id: i32,
     /// The serializer function
@@ -138,24 +138,6 @@ impl Backend for GL3Backend {
         if multisample {
             gl::Enable(gl::MULTISAMPLE);
         }
-
-
-        // let vertex = gl::CreateShader(gl::VERTEX_SHADER);
-        // let vertex_text: *mut i8 = CString::new(DEFAULT_VERTEX_SHADER).expect("No interior null bytes in shader").into_raw();
-        // gl::ShaderSource(vertex, 1, &(vertex_text as *const i8) as *const *const i8, nullptr());
-        // CString::from_raw(vertex_text);
-        // gl::CompileShader(vertex);
-        // let fragment = gl::CreateShader(gl::FRAGMENT_SHADER);
-        // let fragment_text: *mut i8 = CString::new(DEFAULT_FRAGMENT_SHADER).expect("No interior null bytes in shader").into_raw();
-        // gl::ShaderSource(fragment, 1, &(fragment_text as *const i8) as *const *const i8, nullptr());
-        // CString::from_raw(fragment_text);
-        // gl::CompileShader(fragment);
-        // let shader = gl::CreateProgram();
-        // gl::AttachShader(shader, vertex);
-        // gl::AttachShader(shader, fragment);
-        // let raw = CString::new("outColor").expect("No interior null bytes in shader").into_raw();
-        // gl::BindFragDataLocation(shader, 0, raw as *mut i8);
-        // CString::from_raw(raw);
 
         let shader: u32 = 0;
         let fragment: u32 = 0;
@@ -451,7 +433,6 @@ impl Backend for GL3Backend {
     /// contains all of the parameters needed. This does not create or upload a texture, which
     /// is a secondary step.
     fn create_texture_unit(&mut self, texture: &Texture) -> Result<(usize)> {
-        // let mut unit: TextureUnit = Texture
         let texture_idx = self.prepare_texture(&texture.vertex_shader, &texture.fragment_shader)?;
         self.configure_texture(texture_idx, &texture.fields, serialize_vertex, OUT_COLOR, SAMPLER)?;
 
