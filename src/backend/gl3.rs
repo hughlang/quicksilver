@@ -273,7 +273,7 @@ impl Backend for GL3Backend {
     }
 
     // TODO: Deprecate. Replaced with draw_tasks
-    unsafe fn flush(&mut self) {
+    unsafe fn flush(&mut self) -> Result<()> {
         // println!("### GL3 flush");
         if self.indices.len() != 0 {
             // Check if the index buffer is big enough and upload the data
@@ -301,6 +301,7 @@ impl Backend for GL3Backend {
             self.texture = NULL_TEXTURE_ID;
 
         }
+        Ok(())
     }
 
     unsafe fn create_texture(&mut self, data: &[u8], width: u32, height: u32, format: PixelFormat) -> Result<ImageData> {
@@ -481,9 +482,14 @@ impl Backend for GL3Backend {
             return Err(QuicksilverError::ContextError(message));
         }
         let texture = &mut self.tex_units[idx];
-        let texture_id = texture.texture_id;
+        // let texture_id = texture.texture_id;
         let program_id = texture.program_id;
         self.tex_units[idx].serializer = Box::new(cb);
+
+        let float_size = size_of::<f32>() as u32;
+        let vert_size = fields.iter().fold(0, |acc, x| acc + x.1);
+        let stride_distance = (vert_size * float_size) as i32;
+
 
         unsafe {
             // gl::LinkProgram(unit.program_id);
@@ -501,14 +507,10 @@ impl Backend for GL3Backend {
             gl::Uniform1i(location, idx as i32);
             eprintln!(">>> texture location={:?} for program_id={:?}", location, program_id);
 
-            let float_size = size_of::<f32>() as u32;
             let mut offset = 0;
-
-            let vert_size = fields.iter().fold(0, |acc, x| acc + x.1);
-            let stride_distance = (vert_size as usize * size_of::<f32>()) as i32;
             for (v_field, float_count) in fields {
                 // eprintln!("stride_distance={:?} offset={:?}", stride_distance, offset);
-                let size = *float_count;
+                let count = *float_count;
                 let c_name = CString::new(v_field.to_string()).expect("No interior null bytes in shader").into_raw();
                 let attr = gl::GetAttribLocation(program_id, c_name as *const i8);
                 CString::from_raw(c_name);
@@ -518,7 +520,7 @@ impl Backend for GL3Backend {
                 }
                 gl::VertexAttribPointer(
                     attr as u32,
-                    size as i32,
+                    count as i32,
                     gl::FLOAT,
                     gl::FALSE,
                     stride_distance,
@@ -526,8 +528,10 @@ impl Backend for GL3Backend {
                 );
                 gl::EnableVertexAttribArray(attr as u32);
 
-                offset += size * float_size;
+                offset += count * float_size;
             }
+
+            // Map the out_color variable name to the fragment shader output
             let raw = CString::new(out_color).expect("No interior null bytes in shader").into_raw();
             eprintln!("configure_fields program_id={:?} color key={:?}", program_id, out_color);
             gl::BindFragDataLocation(program_id, idx as u32, raw as *mut i8);
@@ -599,7 +603,7 @@ impl Backend for GL3Backend {
 
     /// The logic in this method handles the overly complex situation where all of the vertices and triangles
     /// that were accumulated in Mesh are batched together.
-    unsafe fn draw_tasks(&mut self, tasks: &Vec<DrawTask>) {
+    unsafe fn draw_tasks(&mut self, tasks: &Vec<DrawTask>) -> Result<()> {
         for (_, task) in tasks.iter().enumerate() {
 
             if task.texture_idx >= self.tex_units.len() {
@@ -607,6 +611,7 @@ impl Backend for GL3Backend {
                 continue;
             }
             let texture = &self.tex_units[task.texture_idx];
+            let idx = task.texture_idx as u32;
 
             let mut vertices: Vec<f32> = Vec::new();
             let mut cb = &texture.serializer;
@@ -652,7 +657,6 @@ impl Backend for GL3Backend {
                 for data in &ranges {
                     let range = data.1.clone();
                     // eprintln!("id={:?} range={:?}", &data.0, &range);
-                    let mut indices: Vec<u32> = Vec::new();
                     let texture_id: u32 = {
                         if let Some(id) = data.0 {
                             id
@@ -661,7 +665,6 @@ impl Backend for GL3Backend {
                         }
                     };
 
-                    let idx = task.texture_idx as u32;
                     gl::UseProgram(texture.program_id);
                     gl::ActiveTexture(gl::TEXTURE0);
                     gl::BindTexture(gl::TEXTURE_2D, texture_id);
@@ -669,7 +672,11 @@ impl Backend for GL3Backend {
                     gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, self.texture_mode as i32);
 
                     // gl::Enable(gl::TEXTURE_2D);
-                    gl::Uniform1i(texture.location_id, idx as i32);
+
+                    // Note: This breaks rendering for batch content
+                    // gl::Uniform1i(texture.location_id, idx as i32);
+
+                    let mut indices: Vec<u32> = Vec::new();
                     for triangle in &task.triangles[range] {
                         // eprintln!("add indices={:?} range={:?}", &triangle.indices, data.1.clone());
                         indices.extend_from_slice(&triangle.indices);
@@ -719,6 +726,7 @@ impl Backend for GL3Backend {
             }
 
         }
+        Ok(())
     }
 }
 
@@ -846,7 +854,7 @@ const TEX_FIELDS: &[(&str, u32)] = &[
             ("uses_texture", 1),
         ];
 const OUT_COLOR: &str = "outColor";
-const SAMPLER: &str = "sampler2D";
+const SAMPLER: &str = "tex";
 
 fn serialize_vertex(vertex: Vertex) -> Vec<f32> {
     let mut result: Vec<f32> = Vec::new();

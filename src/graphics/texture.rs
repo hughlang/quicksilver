@@ -70,7 +70,7 @@ impl Texture {
 
     /// Final builder method in the constructor chaine
     pub fn upload(&self, idx: usize, data: &[u8], width: u32, height: u32, format: PixelFormat, window: &mut Window) -> Result<()> {
-        let result = window.backend().upload_texture(idx, data, width, height, format);
+        let _ = window.backend().upload_texture(idx, data, width, height, format);
         Ok(())
     }
 }

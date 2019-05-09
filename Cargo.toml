@@ -55,6 +55,11 @@ rodio = { version = "0.8", optional = true }
 stdweb = "0.4.12"
 webgl_stdweb = "0.3"
 base64 = "0.10"
+wasm-bindgen = "0.2.43"
+web-sys = { version = "0.3.20", features = ['console'] }
+
+[profile.release]
+debug = true
 
 [[example]]
 name = "draw-geometry"

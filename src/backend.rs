@@ -14,7 +14,7 @@ pub(crate) trait Backend {
 
     unsafe fn clear(&mut self, color: Color);
     unsafe fn draw(&mut self, vertices: &[Vertex], triangles: &[GpuTriangle]) -> Result<()>;
-    unsafe fn flush(&mut self);
+    unsafe fn flush(&mut self) -> Result<()>;
     fn present(&self) -> Result<()>;
 
     unsafe fn create_texture(&mut self, data: &[u8], width: u32, height: u32, format: PixelFormat) -> Result<ImageData>;
@@ -27,7 +27,7 @@ pub(crate) trait Backend {
     fn configure_texture<CB>(&mut self, idx: usize, fields: &Vec<(String, u32)>, cb: CB, out_color: &str, tex_name: &str) -> Result<()>
     where CB: Fn(Vertex) -> Vec<f32> + 'static;
 
-    unsafe fn draw_tasks(&mut self, tasks: &Vec<DrawTask>);
+    unsafe fn draw_tasks(&mut self, tasks: &Vec<DrawTask>) -> Result<()>;
 
     unsafe fn create_surface(&mut self, image: &Image) -> Result<SurfaceData>;
     unsafe fn bind_surface(&mut self, surface: &Surface);
