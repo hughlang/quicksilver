@@ -16,7 +16,8 @@ use stdweb::{
         html_element::CanvasElement,
         TypedArray
     },
-    unstable::TryInto
+    unstable::TryInto,
+    console,
 };
 use webgl_stdweb::{
     WebGLBuffer,
@@ -27,7 +28,6 @@ use webgl_stdweb::{
     WebGLUniformLocation
 };
 use stdweb::web::document;
-use wasm_bindgen::prelude::*;
 // #[cfg(target_arch = "wasm32")]
 // use crate::web_sys;
 
@@ -72,19 +72,16 @@ fn try_opt<T>(opt: Option<T>, operation: &str) -> Result<T> {
     }
 }
 
-#[wasm_bindgen]
-extern "C" {
+//extern "C" {
     // Use `js_namespace` here to bind `console.log(..)` instead of just
     // `log(..)`
-    #[wasm_bindgen(js_namespace = console)]
-    fn log(s: &str);
-}
+//fn log(s: &str);
+//}
 
-#[wasm_bindgen]
 pub fn debug_log(text: &str) {
     // use web_sys::console;
     // console::log_1(&text.into());
-    log(text);
+    console!(log, text);
 }
 
 
