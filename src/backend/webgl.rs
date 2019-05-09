@@ -534,19 +534,18 @@ impl Backend for WebGLBackend {
             return Err(QuicksilverError::ContextError(message));
         }
         let mut texture = &mut self.tex_units[idx];
-        // let format = format_gl(format);
-        // // https://developer.mozilla.org/en-US/docs/Web/API/WebGLRenderingContext/texSubImage2D
-        // gl::TexSubImage2D(
-        //     gl::TEXTURE_2D,
-        //     0,
-        //     rect.x() as _,
-        //     rect.y() as _,
-        //     rect.width() as _,
-        //     rect.height() as _,
-        //     format,
-        //     gl::UNSIGNED_BYTE,
-        //     data.as_ptr() as _,
-        // );
+        let format = format_gl(format);
+        self.gl_ctx.tex_sub_image2_d(
+            gl::TEXTURE_2D,
+            0,
+            rect.x() as i32,
+            rect.y() as i32,
+            rect.width() as i32,
+            rect.height() as i32,
+            format,
+            gl::UNSIGNED_BYTE,
+            Some(data),
+        );
         Ok(())
     }
 
@@ -582,117 +581,82 @@ impl Backend for WebGLBackend {
             let array: TypedArray<f32> = vertices.as_slice().into();
             self.gl_ctx.buffer_sub_data(gl::ARRAY_BUFFER, 0, &array.buffer());
 
-            
-            let mut ranges: Vec<(Option<u32>, Range<usize>)> = Vec::new();
-            if task.texture_idx == 0 {
-                // eprintln!(">>> batch triangles count={:?} id={:?}", &task.triangles.len(), texture.texture_id);
-                             
+            let ranges: Vec<(Option<u32>, Range<usize>)> = {
                 let mut last_id: Option<u32> = None;
                 let mut range_start: usize = 0;
-                for (i, triangle) in task.triangles.iter().enumerate() {
-                    let img_id: Option<u32> = {
-                        if let Some(ref img) = triangle.image {
-                            Some(img.get_id())
-                        } else {
-                            None
+
+                let mut ranges: Vec<(Option<u32>, Range<usize>)> = Vec::new();
+                if task.texture_idx == 0 {                                
+                    let mut last_id: Option<u32> = None;
+                    let mut range_start: usize = 0;
+                    for (i, triangle) in task.triangles.iter().enumerate() {
+                        let img_id: Option<u32> = {
+                            if let Some(ref img) = triangle.image {
+                                Some(img.get_id())
+                            } else {
+                                None
+                            }
+                        };
+                        if img_id != last_id {
+                            // eprintln!("img_id changed new={:?} was={:?}", img_id, last_id);
+                            let range: Range<usize> = range_start..i;
+                            ranges.push((last_id, range));
+                            range_start = i;
+                            last_id = img_id;
                         }
-                    };
-                    if img_id != last_id {
-                        // eprintln!("img_id changed new={:?} was={:?}", img_id, last_id);
-                        let range: Range<usize> = range_start..i;
-                        ranges.push((last_id, range));
-                        range_start = i;
-                        last_id = img_id;
                     }
+                    // Add the last range
+                    let range: Range<usize> = range_start..task.triangles.len();
+                    ranges.push((last_id, range));
+                    ranges
+                } else {
+                    let range: Range<usize> = 0..task.triangles.len();
+                    ranges.push((last_id, range));
+                    ranges
                 }
-                // Add the last range
-                let range: Range<usize> = range_start..task.triangles.len();
-                ranges.push((last_id, range));
-
-                // let out = format!(">>> Ranges={:?}", ranges);
-                // debug_log(&out);
-
-                for data in &ranges {
-                    let range = data.1.clone();
-                    // eprintln!("id={:?} range={:?}", &data.0, &range);
-                    // Upload the texture to the GPU
-                    let mut indices: Vec<u32> = Vec::new();
-                    for triangle in &task.triangles[range] {
-                        // let out = format!("add indices={:?} range={:?}", &triangle.indices, data.1.clone());
-                        // debug_log(&out);
-                        indices.extend_from_slice(&triangle.indices);
-                    }
-
-                    let index_length = size_of::<u32>() * indices.len();
-                    if index_length > self.index_length {
-                        self.index_length = index_length * 2;
-                        self.gl_ctx.buffer_data(gl::ELEMENT_ARRAY_BUFFER, self.index_length as i64, gl::STREAM_DRAW);
-                    }
-                    let array: TypedArray<u32> = indices.as_slice().into();
-                    self.gl_ctx.buffer_sub_data(gl::ELEMENT_ARRAY_BUFFER, 0, &array.buffer());
-
-                    self.gl_ctx.active_texture(gl::TEXTURE0 + idx as u32);
-                    if let Some(location) = &self.tex_units[idx].location_id {
-                        self.gl_ctx.uniform1i(Some(location), 0);
-                    }
-
-                    // let out = format!("add indices={:?} tex={:?}", &indices, data.0);
+            };
+            
+            for data in &ranges {
+                let range = data.1.clone();
+                // Upload the texture to the GPU
+                let mut indices: Vec<u32> = Vec::new();
+                for triangle in &task.triangles[range] {
+                    // let out = format!("add indices={:?} range={:?}", &triangle.indices, data.1.clone());
                     // debug_log(&out);
-                    // gl_assert_ok!();
-                    if data.0.is_some() {
-                        let i = data.0.unwrap() as usize;
-                        if i < self.tex_units.len() {
-                            let unit = &self.tex_units[i];
-                            let tex = unit.texture_id.clone();
-                            let out = format!("Bind texture i={:?} tex={:?}", i, tex);
-                            debug_log(&out);
-                            self.gl_ctx.bind_texture(gl::TEXTURE_2D, Some(tex).as_ref());
-                            self.gl_ctx.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, self.texture_mode as i32);
-                            self.gl_ctx.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, self.texture_mode as i32);
-                        }
-                    }
-                    self.check_ok(line!());
-
-                    // match self.tex_units[idx].location_id {
-                    //     Some(ref location) => self.gl_ctx.uniform1i(Some(location), 0),
-                    //     None => self.gl_ctx.uniform1i(None, 0)
-                    // }
-
-
-                    // Draw the triangles
-                    self.gl_ctx.draw_elements(gl::TRIANGLES, indices.len() as i32, gl::UNSIGNED_INT, 0);
-                    self.check_ok(line!());
+                    indices.extend_from_slice(&triangle.indices);
                 }
 
-            } else {
-                // let texture_id = texture.texture_id;
-                // let idx = task.texture_idx as u32;
-                // gl::UseProgram(texture.program_id);
-                // gl::ActiveTexture(gl::TEXTURE0 + idx);
-                // gl::BindTexture(gl::TEXTURE_2D, texture_id);
-                // gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::LINEAR as i32);
-                // gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as i32);
-                // // gl::Enable(gl::TEXTURE_2D);
-                // gl::Uniform1i(texture.location_id, idx as i32);
+                let index_length = size_of::<u32>() * indices.len();
+                if index_length > self.index_length {
+                    self.index_length = index_length * 2;
+                    self.gl_ctx.buffer_data(gl::ELEMENT_ARRAY_BUFFER, self.index_length as i64, gl::STREAM_DRAW);
+                }
+                let array: TypedArray<u32> = indices.as_slice().into();
+                self.gl_ctx.buffer_sub_data(gl::ELEMENT_ARRAY_BUFFER, 0, &array.buffer());
 
-                // let mut indices: Vec<u32> = Vec::new();
-                // for triangle in &task.triangles {
-                //     indices.extend_from_slice(&triangle.indices);
-                // }
+                self.gl_ctx.active_texture(gl::TEXTURE0 + idx as u32);
+                if let Some(location) = &self.tex_units[idx].location_id {
+                    self.gl_ctx.uniform1i(Some(location), 0);
+                }
 
-                // let index_length = size_of::<u32>() * indices.len();
-                // let index_data = indices.as_ptr() as *const c_void;
-                // // If the GPU can't store all of our data, re-create the GPU buffers so they can
-                // if index_length > self.index_length {
-                //     eprintln!("2>>> index_length new={:?} was={:?}", index_length, self.index_length);
-                //     self.index_length = index_length * 2;
-                //     gl::BufferData(gl::ELEMENT_ARRAY_BUFFER, self.index_length as isize, nullptr(), gl::STREAM_DRAW);
-                // }
-                // gl::BufferSubData(gl::ELEMENT_ARRAY_BUFFER, 0, index_length as isize, index_data);
-                // gl::DrawElements(gl::TRIANGLES, indices.len() as i32, gl::UNSIGNED_INT, nullptr());
+                if data.0.is_some() {
+                    let i = data.0.unwrap() as usize;
+                    if i < self.tex_units.len() {
+                        let unit = &self.tex_units[i];
+                        let tex = unit.texture_id.clone();
+                        let out = format!("Bind texture i={:?} tex={:?}", i, tex);
+                        debug_log(&out);
+                        self.gl_ctx.bind_texture(gl::TEXTURE_2D, Some(tex).as_ref());
+                        self.gl_ctx.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, self.texture_mode as i32);
+                        self.gl_ctx.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, self.texture_mode as i32);
+                    }
+                }
+                self.check_ok(line!());
+
+                // Draw the triangles
+                self.gl_ctx.draw_elements(gl::TRIANGLES, indices.len() as i32, gl::UNSIGNED_INT, 0);
+                self.check_ok(line!());
             }
-
-
         }
         Ok(())
     }
