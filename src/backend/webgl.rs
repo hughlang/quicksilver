@@ -72,11 +72,6 @@ fn try_opt<T>(opt: Option<T>, operation: &str) -> Result<T> {
     }
 }
 
-//extern "C" {
-    // Use `js_namespace` here to bind `console.log(..)` instead of just
-    // `log(..)`
-//fn log(s: &str);
-//}
 
 pub fn debug_log(text: &str) {
     // use web_sys::console;
@@ -84,6 +79,28 @@ pub fn debug_log(text: &str) {
     console!(log, text);
 }
 
+// macro_rules! gl_assert_ok {
+//     () => {{
+//         let err = gl::get_error();
+//         if err != gl::NO_ERROR {
+//             debug_log(gl_err_to_str(err));
+//         }
+//         // assert_eq!(err, gl::NO_ERROR, "{}", gl_err_to_str(err));
+//     }};
+// }
+
+fn gl_err_to_str(err: u32) -> &'static str {
+    match err {
+        gl::INVALID_ENUM => "INVALID_ENUM",
+        gl::INVALID_VALUE => "INVALID_VALUE",
+        gl::INVALID_OPERATION => "INVALID_OPERATION",
+        gl::INVALID_FRAMEBUFFER_OPERATION => "INVALID_FRAMEBUFFER_OPERATION",
+        gl::OUT_OF_MEMORY => "OUT_OF_MEMORY",
+        // gl::STACK_UNDERFLOW => "STACK_UNDERFLOW",
+        // gl::STACK_OVERFLOW => "STACK_OVERFLOW",
+        _ => "Unknown error",
+    }
+}
 
 pub struct TextureUnit {
     /// The reference returned by glCreateProgram in backend.link_program.
@@ -163,7 +180,7 @@ impl Backend for WebGLBackend {
         let texture_idx = backend.create_texture_unit(&texture)?;
         let unit = &backend.tex_units[texture_idx];
         let out = format!("Created default texture_unit idx={:?} texture_id={:?} program_id={:?}", texture_idx, unit.texture_id, unit.program_id);
-
+        // gl_assert_ok!();
         debug_log(&out);
 
         Ok(backend)
@@ -233,8 +250,8 @@ impl Backend for WebGLBackend {
         let array: TypedArray<f32> = self.vertices.as_slice().into();
         self.gl_ctx.buffer_sub_data(gl::ARRAY_BUFFER, 0, &array.buffer());
 
-        let out = format!("### DRAW vertex_length={:?}", vertex_length);
-        debug_log(&out);
+        // let out = format!("### DRAW vertex_length={:?}", vertex_length);
+        // debug_log(&out);
 
         // Scan through the triangles, adding the indices to the index buffer (every time the
         // texture switches, flush and switch the bound texture)
@@ -269,8 +286,8 @@ impl Backend for WebGLBackend {
             self.gl_ctx.buffer_sub_data(gl::ELEMENT_ARRAY_BUFFER, 0, &array.buffer());
             // Upload the texture to the GPU
             self.gl_ctx.active_texture(gl::TEXTURE0);
-            let out = format!("### FLUSH texture={:?}", self.texture);
-            debug_log(&out);
+            // let out = format!("### FLUSH texture={:?}", self.texture);
+            // debug_log(&out);
 
             if let Some(index) = self.texture {
                 self.gl_ctx.bind_texture(gl::TEXTURE_2D, self.textures[index as usize].as_ref());
@@ -403,10 +420,17 @@ impl Backend for WebGLBackend {
     /// contains all of the parameters needed. This does not create or upload a texture, which
     /// is a secondary step.
     fn create_texture_unit(&mut self, texture: &Texture) -> Result<(usize)> {
-        let texture_idx = self.prepare_texture(&texture.vertex_shader, &texture.fragment_shader)?;
-        self.configure_texture(texture_idx, &texture.fields, serialize_vertex, OUT_COLOR, SAMPLER)?;
-
-        Ok(texture_idx)
+        let result = self.prepare_texture(&texture.vertex_shader, &texture.fragment_shader);
+        if result.is_ok() {
+            let texture_idx = result.unwrap();
+            self.configure_texture(texture_idx, &texture.fields, serialize_vertex, OUT_COLOR, SAMPLER)?;
+            self.check_ok(line!());
+            return Ok(texture_idx);
+        } else {
+            let out = format!(">>> {:?}", result);
+            debug_log(&out);
+            return result;
+        }
     }
 
     fn prepare_texture(&mut self, vertex_shader: &str, fragment_shader: &str) -> Result<usize> {
@@ -458,6 +482,8 @@ impl Backend for WebGLBackend {
             if location.is_ok() {
                 texture.location_id = Some(location.unwrap());
             }
+            let out = format!("Configure texture idx={:?}, program={:?}, texture={:?}, location={:?}", idx, program_id, texture.texture_id, texture.location_id);
+            debug_log(&out);
 
             for (v_field, float_count) in fields {
                 let count = *float_count;
@@ -472,8 +498,9 @@ impl Backend for WebGLBackend {
                     offset as i64);
                 offset += count * float_size;
             }
-            // let out = format!("Configure fields={:?} location={:?} program_id={:?}", fields, texture.location_id, program_id);
-            // debug_log(&out);
+
+            let out = format!("Configure fields={:?} location={:?} program_id={:?}", fields, texture.location_id, program_id);
+            debug_log(&out);
 
             Ok(())
         }
@@ -496,7 +523,7 @@ impl Backend for WebGLBackend {
             let format = format as u32;
             self.gl_ctx.tex_image2_d(gl::TEXTURE_2D, 0, gl::RGBA as i32, width as i32, height as i32, 0, format, gl::UNSIGNED_BYTE, Some(data));
             // self.gl_ctx.generate_mipmap(gl::TEXTURE_2D);
-
+            self.check_ok(line!());
             Ok(ImageData { id: idx as u32, width, height })
         }
     }
@@ -524,8 +551,8 @@ impl Backend for WebGLBackend {
     }
 
     unsafe fn draw_tasks(&mut self, tasks: &Vec<DrawTask>) -> Result<()> {
-        let out = format!(">>> tasks count={:?}", tasks.len());
-        debug_log(&out);
+        // let out = format!(">>> tasks count={:?}", tasks.len());
+        // debug_log(&out);
 
         for (_, task) in tasks.iter().enumerate() {
             if task.texture_idx >= self.tex_units.len() {
@@ -545,7 +572,8 @@ impl Backend for WebGLBackend {
             }
             let vertex_length = size_of::<f32>() * vertices.len();
             if vertex_length > self.vertex_length {
-                eprintln!(">>> vertex_length new={:?} was={:?}", vertex_length, self.vertex_length);
+                let out = format!(">>> vertex_length new={:?} was={:?}", vertex_length, self.vertex_length);
+                debug_log(&out);
                 self.vertex_length = vertex_length * 2;
                 // Create the vertex array
                 self.gl_ctx.buffer_data(gl::ARRAY_BUFFER, self.vertex_length as i64, gl::STREAM_DRAW);
@@ -554,10 +582,11 @@ impl Backend for WebGLBackend {
             let array: TypedArray<f32> = vertices.as_slice().into();
             self.gl_ctx.buffer_sub_data(gl::ARRAY_BUFFER, 0, &array.buffer());
 
+            
             let mut ranges: Vec<(Option<u32>, Range<usize>)> = Vec::new();
             if task.texture_idx == 0 {
                 // eprintln!(">>> batch triangles count={:?} id={:?}", &task.triangles.len(), texture.texture_id);
-
+                             
                 let mut last_id: Option<u32> = None;
                 let mut range_start: usize = 0;
                 for (i, triangle) in task.triangles.iter().enumerate() {
@@ -580,27 +609,17 @@ impl Backend for WebGLBackend {
                 let range: Range<usize> = range_start..task.triangles.len();
                 ranges.push((last_id, range));
 
-                let out = format!(">>> Ranges={:?}", ranges);
-                debug_log(&out);
+                // let out = format!(">>> Ranges={:?}", ranges);
+                // debug_log(&out);
 
                 for data in &ranges {
                     let range = data.1.clone();
                     // eprintln!("id={:?} range={:?}", &data.0, &range);
                     // Upload the texture to the GPU
-                    self.gl_ctx.active_texture(gl::TEXTURE0);
-                    let tex = Some(texture.texture_id.clone());
-                    self.gl_ctx.bind_texture(gl::TEXTURE_2D, tex.as_ref());
-                    self.gl_ctx.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, self.texture_mode as i32);
-                    self.gl_ctx.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, self.texture_mode as i32);
-
-                    match self.tex_units[idx].location_id {
-                        Some(ref location) => self.gl_ctx.uniform1i(Some(location), 0),
-                        None => self.gl_ctx.uniform1i(None, 0)
-                    }
-
                     let mut indices: Vec<u32> = Vec::new();
                     for triangle in &task.triangles[range] {
-                        // eprintln!("add indices={:?} range={:?}", &triangle.indices, data.1.clone());
+                        // let out = format!("add indices={:?} range={:?}", &triangle.indices, data.1.clone());
+                        // debug_log(&out);
                         indices.extend_from_slice(&triangle.indices);
                     }
 
@@ -612,8 +631,37 @@ impl Backend for WebGLBackend {
                     let array: TypedArray<u32> = indices.as_slice().into();
                     self.gl_ctx.buffer_sub_data(gl::ELEMENT_ARRAY_BUFFER, 0, &array.buffer());
 
+                    self.gl_ctx.active_texture(gl::TEXTURE0 + idx as u32);
+                    if let Some(location) = &self.tex_units[idx].location_id {
+                        self.gl_ctx.uniform1i(Some(location), 0);
+                    }
+
+                    // let out = format!("add indices={:?} tex={:?}", &indices, data.0);
+                    // debug_log(&out);
+                    // gl_assert_ok!();
+                    if data.0.is_some() {
+                        let i = data.0.unwrap() as usize;
+                        if i < self.tex_units.len() {
+                            let unit = &self.tex_units[i];
+                            let tex = unit.texture_id.clone();
+                            let out = format!("Bind texture i={:?} tex={:?}", i, tex);
+                            debug_log(&out);
+                            self.gl_ctx.bind_texture(gl::TEXTURE_2D, Some(tex).as_ref());
+                            self.gl_ctx.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, self.texture_mode as i32);
+                            self.gl_ctx.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, self.texture_mode as i32);
+                        }
+                    }
+                    self.check_ok(line!());
+
+                    // match self.tex_units[idx].location_id {
+                    //     Some(ref location) => self.gl_ctx.uniform1i(Some(location), 0),
+                    //     None => self.gl_ctx.uniform1i(None, 0)
+                    // }
+
+
                     // Draw the triangles
-                    self.gl_ctx.draw_elements(gl::TRIANGLES, self.indices.len() as i32, gl::UNSIGNED_INT, 0);
+                    self.gl_ctx.draw_elements(gl::TRIANGLES, indices.len() as i32, gl::UNSIGNED_INT, 0);
+                    self.check_ok(line!());
                 }
 
             } else {
@@ -668,6 +716,17 @@ impl WebGLBackend {
         self.gl_ctx.use_program(Some(&program));
         return Ok(program);
     }
+
+    fn check_ok(&self, line: u32) {
+        let err = self.gl_ctx.get_error();
+        if err != gl::NO_ERROR {
+            debug_log(&format!(">> ERROR at line {}", line));
+            debug_log(gl_err_to_str(err));
+        } else {
+            // debug_log(&format!(">> OK at line {}", line));
+        }
+    }
+
 }
 
 impl Drop for WebGLBackend {
@@ -686,7 +745,8 @@ impl Drop for WebGLBackend {
     }
 }
 
-const DEFAULT_VERTEX_SHADER: &str = r#"attribute vec2 position;
+const DEFAULT_VERTEX_SHADER: &str = r#"
+attribute vec2 position;
 attribute vec2 tex_coord;
 attribute vec4 color;
 attribute lowp float uses_texture;
@@ -700,7 +760,8 @@ void main() {
     Uses_texture = uses_texture;
 }"#;
 
-const DEFAULT_FRAGMENT_SHADER: &str = r#"varying highp vec4 Color;
+const DEFAULT_FRAGMENT_SHADER: &str = r#"
+varying highp vec4 Color;
 varying highp vec2 Tex_coord;
 varying lowp float Uses_texture;
 uniform sampler2D tex;
