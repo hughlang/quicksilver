@@ -538,7 +538,7 @@ impl Backend for GL3Backend {
     }
 
     // TODO: Consolidate with create_texture method
-    fn upload_texture(&mut self, idx: usize, data: &[u8], width: u32, height: u32, format: PixelFormat) -> Result<()> {
+    fn upload_texture(&mut self, idx: usize, data: &[u8], width: u32, height: u32, format: PixelFormat) -> Result<(ImageData)> {
         unsafe {
             if idx >= self.tex_units.len() {
                 let message = format!("Texture index {} out of bounds for len={}", idx, self.tex_units.len());
@@ -564,7 +564,7 @@ impl Backend for GL3Backend {
             // Note: this call is not necessary, but help some use cases.
             // gl::GenerateMipmap(gl::TEXTURE_2D);
             gl_assert_ok!();
-            return Ok(());
+            Ok(ImageData { id: texture.texture_id, width, height })
         }
     }
 

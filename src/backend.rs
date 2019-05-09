@@ -22,7 +22,7 @@ pub(crate) trait Backend {
 
     fn create_texture_unit(&mut self, texture: &Texture) -> Result<(usize)>;
     fn prepare_texture(&mut self, vertex_shader: &str, fragment_shader: &str) -> Result<usize>;
-    fn upload_texture(&mut self, idx: usize, data: &[u8], width: u32, height: u32, format: PixelFormat) -> Result<()>;
+    fn upload_texture(&mut self, idx: usize, data: &[u8], width: u32, height: u32, format: PixelFormat) -> Result<(ImageData)>;
     fn update_texture(&mut self, idx: usize, data: &[u8], rect: &Rectangle, format: PixelFormat) -> Result<()>;
     fn configure_texture<CB>(&mut self, idx: usize, fields: &Vec<(String, u32)>, cb: CB, out_color: &str, tex_name: &str) -> Result<()>
     where CB: Fn(Vertex) -> Vec<f32> + 'static;

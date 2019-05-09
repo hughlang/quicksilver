@@ -272,7 +272,7 @@ impl Backend for WebGLBackend {
         self.gl_ctx.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::NEAREST as i32);
         self.gl_ctx.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::NEAREST as i32);
         self.gl_ctx.tex_image2_d(gl::TEXTURE_2D, 0, gl::RGBA as i32, width as i32, height as i32, 0, format, gl::UNSIGNED_BYTE, Some(data));
-        self.gl_ctx.generate_mipmap(gl::TEXTURE_2D);
+        // self.gl_ctx.generate_mipmap(gl::TEXTURE_2D);
         self.textures.push(Some(texture));
         Ok(ImageData { id, width, height })
     }
@@ -383,7 +383,10 @@ impl Backend for WebGLBackend {
             let fragment_id = self.compile_shader(fragment_shader, gl::FRAGMENT_SHADER)?;
             let program_id = self.link_program(&vertex_id, &fragment_id)?;
             let texture_id = try_opt(self.gl_ctx.create_texture(), "Create texture")?;
+            // let texture_id = {
 
+            // }
+            // self.gl_ctx.create_texture();
             // Create a no-op serializer function
             let serializer = |_vertex| -> Vec<f32> {
                 Vec::new()
@@ -402,7 +405,7 @@ impl Backend for WebGLBackend {
         }
     }
 
-    fn upload_texture(&mut self, idx: usize, data: &[u8], width: u32, height: u32, format: PixelFormat) -> Result<()> {
+    fn upload_texture(&mut self, idx: usize, data: &[u8], width: u32, height: u32, format: PixelFormat) -> Result<(ImageData)> {
         unsafe {
             if idx >= self.tex_units.len() {
                 let message = format!("Texture index {} out of bounds for len={}", idx, self.tex_units.len());
@@ -418,9 +421,9 @@ impl Backend for WebGLBackend {
             self.gl_ctx.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::NEAREST as i32);
             let format = format as u32;
             self.gl_ctx.tex_image2_d(gl::TEXTURE_2D, 0, gl::RGBA as i32, width as i32, height as i32, 0, format, gl::UNSIGNED_BYTE, Some(data));
-            self.gl_ctx.generate_mipmap(gl::TEXTURE_2D);
+            // self.gl_ctx.generate_mipmap(gl::TEXTURE_2D);
 
-            return Ok(());
+            Ok(ImageData { id: idx as u32, width, height })
         }
     }
 
