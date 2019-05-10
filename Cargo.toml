@@ -56,9 +56,6 @@ stdweb = "0.4.12"
 webgl_stdweb = "0.3"
 base64 = "0.10"
 
-[profile.release]
-debug = true
-
 [[example]]
 name = "draw-geometry"
 required-features = []

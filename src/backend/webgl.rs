@@ -479,9 +479,9 @@ impl Backend for WebGLBackend {
 
             let message = format!(">> Get texture uniform {:?}", program_id);
             let location = try_opt(self.gl_ctx.get_uniform_location(program_id, tex_name), &message);
-            if location.is_ok() {
+            // if location.is_ok() {
                 texture.location_id = Some(location.unwrap());
-            }
+            // }
             let out = format!("Configure texture idx={:?}, program={:?}, texture={:?}, location={:?}", idx, program_id, texture.texture_id, texture.location_id);
             debug_log(&out);
 
@@ -581,11 +581,8 @@ impl Backend for WebGLBackend {
             let array: TypedArray<f32> = vertices.as_slice().into();
             self.gl_ctx.buffer_sub_data(gl::ARRAY_BUFFER, 0, &array.buffer());
 
+            let mut ranges: Vec<(Option<u32>, Range<usize>)> = Vec::new();
             let ranges: Vec<(Option<u32>, Range<usize>)> = {
-                let mut last_id: Option<u32> = None;
-                let mut range_start: usize = 0;
-
-                let mut ranges: Vec<(Option<u32>, Range<usize>)> = Vec::new();
                 if task.texture_idx == 0 {                                
                     let mut last_id: Option<u32> = None;
                     let mut range_start: usize = 0;
@@ -611,7 +608,7 @@ impl Backend for WebGLBackend {
                     ranges
                 } else {
                     let range: Range<usize> = 0..task.triangles.len();
-                    ranges.push((last_id, range));
+                    ranges.push((Some(idx as u32), range));
                     ranges
                 }
             };
@@ -649,6 +646,9 @@ impl Backend for WebGLBackend {
                         self.gl_ctx.bind_texture(gl::TEXTURE_2D, Some(tex).as_ref());
                         self.gl_ctx.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, self.texture_mode as i32);
                         self.gl_ctx.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, self.texture_mode as i32);
+                    } else {
+                        let out = format!("img_id {:?} is larger than tex_units {}", i, self.tex_units.len());
+                        debug_log(&out);
                     }
                 }
                 self.check_ok(line!());

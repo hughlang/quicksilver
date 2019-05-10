@@ -21,7 +21,7 @@ use std::{
 // OpenGL debug functions
 // *****************************************************************************************************
 
-// https://github.com/zeux/oxid/blob/master/src/oxid/gfx/context.rs
+/// This function call doesn't work on macOS
 extern "system" fn debug_output_gl(_source: GLenum, _type: GLenum, _id: GLuint, _severity: GLenum,
     _length: GLsizei, message: *const GLchar, _param: *mut GLvoid) {
     unsafe {
@@ -104,12 +104,11 @@ impl Backend for GL3Backend {
     type Platform = WindowedContext;
 
     unsafe fn new(context: WindowedContext, texture_mode: ImageScaleStrategy, multisample: bool) -> Result<GL3Backend> {
-        if gl::DebugMessageCallback::is_loaded() {
-            eprintln!("Load DebugMessageCallback");
-            gl::Enable(gl::DEBUG_OUTPUT);
-            gl::DebugMessageCallback(debug_output_gl as GLDEBUGPROC, ptr::null());
-            gl::Enable(gl::DEBUG_OUTPUT_SYNCHRONOUS);
-        }
+        // if gl::DebugMessageCallback::is_loaded() {
+        //     gl::Enable(gl::DEBUG_OUTPUT);
+        //     gl::DebugMessageCallback(debug_output_gl as GLDEBUGPROC, ptr::null());
+        //     gl::Enable(gl::DEBUG_OUTPUT_SYNCHRONOUS);
+        // }
 
         let texture_mode = match texture_mode {
             ImageScaleStrategy::Pixelate => gl::NEAREST,
@@ -327,7 +326,7 @@ impl Backend for GL3Backend {
                         height as i32, 0, format, gl::UNSIGNED_BYTE, data);
         // Note: this call is not necessary, but help some use cases.
         gl::Enable(gl::TEXTURE_2D);
-        // gl::GenerateMipmap(gl::TEXTURE_2D);
+        gl::GenerateMipmap(gl::TEXTURE_2D);
         Ok(ImageData { id, width, height })
     }
 
@@ -501,9 +500,9 @@ impl Backend for GL3Backend {
 
             let raw = CString::new(tex_name).expect("No tex").into_raw();
             let location = gl::GetUniformLocation(program_id, raw as *const i8);
-            if location >= 0 {
+            // if location >= 0 {
                 self.tex_units[idx].location_id = location;
-            }
+            // }
             gl::Uniform1i(location, idx as i32);
             eprintln!(">>> texture location={:?} for program_id={:?}", location, program_id);
 
@@ -552,7 +551,7 @@ impl Backend for GL3Backend {
 
             let data = if data.len() == 0 { nullptr() } else { data.as_ptr() as *const c_void };
             let format = format_gl(format);
-            eprintln!(">>> format={:?} for texture_id={:?}", format, texture.texture_id);
+            eprintln!(">>> Upload Texture: idx={} for texture_id={:?}", idx, texture.texture_id);
             // This 1 value only valid for single channel (RED). https://www.khronos.org/opengl/wiki/Common_Mistakes
             gl::PixelStorei(gl::UNPACK_ALIGNMENT, 1);
             gl::ActiveTexture(gl::TEXTURE0 + idx as u32);
@@ -610,8 +609,8 @@ impl Backend for GL3Backend {
                 eprintln!("Texture index {} out of bounds for len={}", task.texture_idx, self.tex_units.len());
                 continue;
             }
-            let texture = &self.tex_units[task.texture_idx];
             let idx = task.texture_idx as u32;
+            let texture = &self.tex_units[task.texture_idx];
 
             let mut vertices: Vec<f32> = Vec::new();
             let mut cb = &texture.serializer;
@@ -629,101 +628,111 @@ impl Backend for GL3Backend {
             }
             gl::BufferSubData(gl::ARRAY_BUFFER, 0, vertex_length as isize, vertex_data);
 
-            if task.texture_idx == 0 {
-                // eprintln!(">>> batch triangles count={:?} id={:?}", &task.triangles.len(), texture.texture_id);
+            let ranges: Vec<(Option<u32>, Range<usize>)> = {
 
                 let mut ranges: Vec<(Option<u32>, Range<usize>)> = Vec::new();
-                let mut last_id: Option<u32> = None;
-                let mut range_start: usize = 0;
-                for (i, triangle) in task.triangles.iter().enumerate() {
-                    let img_id: Option<u32> = {
-                        if let Some(ref img) = triangle.image {
-                            Some(img.get_id())
-                        } else {
-                            None
+                if task.texture_idx == 0 {
+                    let mut last_id: Option<u32> = None;
+                    let mut range_start: usize = 0;
+
+                    for (i, triangle) in task.triangles.iter().enumerate() {
+                        let img_id: Option<u32> = {
+                            if let Some(ref img) = triangle.image {
+                                Some(img.get_id())
+                            } else {
+                                None
+                            }
+                        };
+                        if img_id != last_id {
+                            // eprintln!("img_id changed new={:?} was={:?}", img_id, last_id);
+                            let range: Range<usize> = range_start..i;
+                            ranges.push((last_id, range));
+                            range_start = i;
+                            last_id = img_id;
                         }
-                    };
-                    if img_id != last_id {
-                        // eprintln!("img_id changed new={:?} was={:?}", img_id, last_id);
-                        let range: Range<usize> = range_start..i;
-                        ranges.push((last_id, range));
-                        range_start = i;
-                        last_id = img_id;
                     }
+                    let range: Range<usize> = range_start..task.triangles.len();
+                    ranges.push((last_id, range));
+                    ranges
+                } else {
+                    let range: Range<usize> = 0..task.triangles.len();
+                    ranges.push((Some(texture.texture_id), range));
+                    ranges
                 }
-                let range: Range<usize> = range_start..task.triangles.len();
-                ranges.push((last_id, range));
+            };
 
-                for data in &ranges {
-                    let range = data.1.clone();
-                    // eprintln!("id={:?} range={:?}", &data.0, &range);
-                    let texture_id: u32 = {
-                        if let Some(id) = data.0 {
-                            id
-                        } else {
-                            texture.texture_id
-                        }
-                    };
-
-                    gl::UseProgram(texture.program_id);
-                    gl::ActiveTexture(gl::TEXTURE0);
-                    gl::BindTexture(gl::TEXTURE_2D, texture_id);
-                    gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, self.texture_mode as i32);
-                    gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, self.texture_mode as i32);
-
-                    // gl::Enable(gl::TEXTURE_2D);
-
-                    // Note: This breaks rendering for batch content
-                    // gl::Uniform1i(texture.location_id, idx as i32);
-
-                    let mut indices: Vec<u32> = Vec::new();
-                    for triangle in &task.triangles[range] {
-                        // eprintln!("add indices={:?} range={:?}", &triangle.indices, data.1.clone());
-                        indices.extend_from_slice(&triangle.indices);
-                    }
-
-                    let index_length = size_of::<u32>() * indices.len();
-                    let index_data = indices.as_ptr() as *const c_void;
-                    // If the GPU can't store all of our data, re-create the GPU buffers so they can
-                    if index_length > self.index_length {
-                        eprintln!("1>>> index_length new={:?} was={:?}", index_length, self.index_length);
-                        self.index_length = index_length * 2;
-                        gl::BufferData(gl::ELEMENT_ARRAY_BUFFER, self.index_length as isize, nullptr(), gl::STREAM_DRAW);
-                    }
-
-                    // eprintln!("vertex_length={:?} index_length={:?}", vertex_length, index_length);
-                    gl::BufferSubData(gl::ELEMENT_ARRAY_BUFFER, 0, index_length as isize, index_data);
-
-                    // Draw the triangles
-                    gl::DrawElements(gl::TRIANGLES, indices.len() as i32, gl::UNSIGNED_INT, nullptr());
-                }
-            } else {
-                let texture_id = texture.texture_id;
-                let idx = task.texture_idx as u32;
-                gl::UseProgram(texture.program_id);
-                gl::ActiveTexture(gl::TEXTURE0 + idx);
-                gl::BindTexture(gl::TEXTURE_2D, texture_id);
-                gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::LINEAR as i32);
-                gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as i32);
-                // gl::Enable(gl::TEXTURE_2D);
-                gl::Uniform1i(texture.location_id, idx as i32);
-
+            for data in &ranges {
+                let range = data.1.clone();
                 let mut indices: Vec<u32> = Vec::new();
-                for triangle in &task.triangles {
+                for triangle in &task.triangles[range] {
+                    // eprintln!("add indices={:?} range={:?}", &triangle.indices, data.1.clone());
                     indices.extend_from_slice(&triangle.indices);
                 }
-
                 let index_length = size_of::<u32>() * indices.len();
                 let index_data = indices.as_ptr() as *const c_void;
                 // If the GPU can't store all of our data, re-create the GPU buffers so they can
                 if index_length > self.index_length {
-                    eprintln!("2>>> index_length new={:?} was={:?}", index_length, self.index_length);
+                    eprintln!("1>>> index_length new={:?} was={:?}", index_length, self.index_length);
                     self.index_length = index_length * 2;
                     gl::BufferData(gl::ELEMENT_ARRAY_BUFFER, self.index_length as isize, nullptr(), gl::STREAM_DRAW);
                 }
                 gl::BufferSubData(gl::ELEMENT_ARRAY_BUFFER, 0, index_length as isize, index_data);
+
+                let texture_id: u32 = {
+                    if let Some(id) = data.0 {
+                        id
+                    } else {
+                        texture.texture_id
+                    }
+                };
+
+                eprintln!("{} texture_id={:?} program_id={:?}", idx, texture_id, texture.program_id);
+
+                gl::UseProgram(texture.program_id);
+                gl::ActiveTexture(gl::TEXTURE0 + idx);
+                if idx > 0 {
+                    gl::Uniform1i(texture.location_id, idx as i32);
+                }
+                gl::BindTexture(gl::TEXTURE_2D, texture_id);
+                gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, self.texture_mode as i32);
+                gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, self.texture_mode as i32);
+
+                // gl::Enable(gl::TEXTURE_2D);
+
+                // Note: This breaks rendering for batch content
+
+
+
+                // Draw the triangles
                 gl::DrawElements(gl::TRIANGLES, indices.len() as i32, gl::UNSIGNED_INT, nullptr());
             }
+            // } else {
+            //     let texture_id = texture.texture_id;
+            //     let idx = task.texture_idx as u32;
+            //     gl::UseProgram(texture.program_id);
+            //     gl::ActiveTexture(gl::TEXTURE0 + idx);
+            //     gl::BindTexture(gl::TEXTURE_2D, texture_id);
+            //     gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::LINEAR as i32);
+            //     gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as i32);
+            //     // gl::Enable(gl::TEXTURE_2D);
+            //     gl::Uniform1i(texture.location_id, idx as i32);
+
+            //     let mut indices: Vec<u32> = Vec::new();
+            //     for triangle in &task.triangles {
+            //         indices.extend_from_slice(&triangle.indices);
+            //     }
+
+            //     let index_length = size_of::<u32>() * indices.len();
+            //     let index_data = indices.as_ptr() as *const c_void;
+            //     // If the GPU can't store all of our data, re-create the GPU buffers so they can
+            //     if index_length > self.index_length {
+            //         eprintln!("2>>> index_length new={:?} was={:?}", index_length, self.index_length);
+            //         self.index_length = index_length * 2;
+            //         gl::BufferData(gl::ELEMENT_ARRAY_BUFFER, self.index_length as isize, nullptr(), gl::STREAM_DRAW);
+            //     }
+            //     gl::BufferSubData(gl::ELEMENT_ARRAY_BUFFER, 0, index_length as isize, index_data);
+            //     gl::DrawElements(gl::TRIANGLES, indices.len() as i32, gl::UNSIGNED_INT, nullptr());
+            // }
 
         }
         Ok(())

@@ -55,7 +55,7 @@ impl Image {
     /// Load an image from pixel values in a byte array
     pub fn from_raw(data: &[u8], width: u32, height: u32, format: PixelFormat) -> Result<Image> {
         unsafe {
-            let img = instance().upload_texture(0, data, width, height, format)?;
+            let img = instance().create_texture(data, width, height, format)?;
             let result = Image::new(img);
             Ok(result)
         }
