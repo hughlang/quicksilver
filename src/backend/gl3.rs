@@ -686,7 +686,7 @@ impl Backend for GL3Backend {
                     }
                 };
 
-                eprintln!("{} texture_id={:?} program_id={:?}", idx, texture_id, texture.program_id);
+                // eprintln!("{} texture_id={:?} program_id={:?}", idx, texture_id, texture.program_id);
 
                 gl::UseProgram(texture.program_id);
                 gl::ActiveTexture(gl::TEXTURE0 + idx);
@@ -697,43 +697,9 @@ impl Backend for GL3Backend {
                 gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, self.texture_mode as i32);
                 gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, self.texture_mode as i32);
 
-                // gl::Enable(gl::TEXTURE_2D);
-
-                // Note: This breaks rendering for batch content
-
-
-
                 // Draw the triangles
                 gl::DrawElements(gl::TRIANGLES, indices.len() as i32, gl::UNSIGNED_INT, nullptr());
             }
-            // } else {
-            //     let texture_id = texture.texture_id;
-            //     let idx = task.texture_idx as u32;
-            //     gl::UseProgram(texture.program_id);
-            //     gl::ActiveTexture(gl::TEXTURE0 + idx);
-            //     gl::BindTexture(gl::TEXTURE_2D, texture_id);
-            //     gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::LINEAR as i32);
-            //     gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as i32);
-            //     // gl::Enable(gl::TEXTURE_2D);
-            //     gl::Uniform1i(texture.location_id, idx as i32);
-
-            //     let mut indices: Vec<u32> = Vec::new();
-            //     for triangle in &task.triangles {
-            //         indices.extend_from_slice(&triangle.indices);
-            //     }
-
-            //     let index_length = size_of::<u32>() * indices.len();
-            //     let index_data = indices.as_ptr() as *const c_void;
-            //     // If the GPU can't store all of our data, re-create the GPU buffers so they can
-            //     if index_length > self.index_length {
-            //         eprintln!("2>>> index_length new={:?} was={:?}", index_length, self.index_length);
-            //         self.index_length = index_length * 2;
-            //         gl::BufferData(gl::ELEMENT_ARRAY_BUFFER, self.index_length as isize, nullptr(), gl::STREAM_DRAW);
-            //     }
-            //     gl::BufferSubData(gl::ELEMENT_ARRAY_BUFFER, 0, index_length as isize, index_data);
-            //     gl::DrawElements(gl::TRIANGLES, indices.len() as i32, gl::UNSIGNED_INT, nullptr());
-            // }
-
         }
         Ok(())
     }

@@ -12,11 +12,12 @@ use std::{
     ops::Range,
 };
 use stdweb::{
+    InstanceOf, Reference, ReferenceType, Value,
     web::{
         html_element::CanvasElement,
         TypedArray
     },
-    unstable::TryInto,
+    unstable::{TryInto, TryFrom},
     console,
 };
 use webgl_stdweb::{
@@ -25,7 +26,7 @@ use webgl_stdweb::{
     WebGL2RenderingContext as gl,
     WebGLShader,
     WebGLTexture,
-    WebGLUniformLocation
+    WebGLUniformLocation,
 };
 use stdweb::web::document;
 // #[cfg(target_arch = "wasm32")]
@@ -308,21 +309,21 @@ impl Backend for WebGLBackend {
     }
 
     unsafe fn create_texture(&mut self, data: &[u8], width: u32, height: u32, format: PixelFormat) -> Result<ImageData> {
-        // FIXME: This numbering scheme won't work for new Texture and DrawTask scheme
-        let id = self.textures.len() as u32;
         let format = format_gl(format);
         let texture = try_opt(self.gl_ctx.create_texture(), "Create GL texture")?;
+        let raw = texture.as_ref();
+        let id = raw.as_raw() as u32;
+        let out = format!("### Created texture id={} width={:?} height={:?}", id, width, height);
+        debug_log(&out);
+
         self.gl_ctx.bind_texture(gl::TEXTURE_2D, Some(&texture));
         self.gl_ctx.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::CLAMP_TO_EDGE as i32);
         self.gl_ctx.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::CLAMP_TO_EDGE as i32);
         self.gl_ctx.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::NEAREST as i32);
         self.gl_ctx.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::NEAREST as i32);
-        self.gl_ctx.tex_image2_d(gl::TEXTURE_2D, 0, gl::RGBA as i32, width as i32, height as i32, 0, format, gl::UNSIGNED_BYTE, Some(data));
+        self.gl_ctx.tex_image2_d(gl::TEXTURE_2D, 0, format as i32, width as i32, height as i32, 0, format, gl::UNSIGNED_BYTE, Some(data));
         // self.gl_ctx.generate_mipmap(gl::TEXTURE_2D);
-        let out = format!("Adding texture idx={:?} texture={:?}", id, texture);
-        debug_log(&out);
 
-        self.textures.push(Some(texture));
         Ok(ImageData { id, width, height })
     }
 
@@ -631,26 +632,54 @@ impl Backend for WebGLBackend {
                 let array: TypedArray<u32> = indices.as_slice().into();
                 self.gl_ctx.buffer_sub_data(gl::ELEMENT_ARRAY_BUFFER, 0, &array.buffer());
 
+                // debug_log(text: &str)
+
+                let bind_tex = {
+                    if let Some(img_id) = data.0 {
+
+        // let event: GamepadConnectedEvent = js!(
+        //     return new GamepadEvent("gamepadconnected");
+        // ).try_into().unwrap();                        
+                        let a_ref = Reference::from_raw_unchecked(img_id as i32);
+                        // let result: WebGLTexture = a_ref.try_into().unwrap();
+                        let result = WebGLTexture::from_reference_unchecked(a_ref);
+                        // let result = WebGLTexture::try_from(a_ref);
+                        // let result = a_ref.downcast::<WebGLTexture>();
+                        // let _ = WebGLTexture::from_raw_unchecked(a_ref);
+                        // let reference = js! { return new WebGLTexture(a_ref); }.into_reference().unwrap();
+                        let out = format!("From img_id: {:?} tex={:?}", img_id, &result);
+                        debug_log(&out);
+                        // let thing = a_ref.clone_from(source: &Self)
+                        // let result = a_ref.try_into();
+                        // let result = a_ref.clone().downcast::<WebGLTexture>();
+                        // if result.is_ok() {
+                        //     result.unwrap()
+                        // } else {
+                        //     None
+                        // }
+                        // let thing = WebGLTexture(a_ref);
+
+                        Some(result)
+                    } else {
+                        debug_log("From texture");
+                        Some(texture.texture_id.clone())
+                    }
+                };
+
+                let out = format!("{}: {:?} bind_tex: {:?}", idx, data.1.clone(), bind_tex);
+                debug_log(&out);
+
                 self.gl_ctx.active_texture(gl::TEXTURE0 + idx as u32);
-                if let Some(location) = &self.tex_units[idx].location_id {
-                    self.gl_ctx.uniform1i(Some(location), 0);
+                if idx > 0 {
+                    self.gl_ctx.uniform1i(texture.location_id.as_ref(), idx as i32);
                 }
 
-                if data.0.is_some() {
-                    let i = data.0.unwrap() as usize;
-                    if i < self.tex_units.len() {
-                        let unit = &self.tex_units[i];
-                        let tex = unit.texture_id.clone();
-                        let out = format!("Bind texture i={:?} tex={:?}", i, tex);
-                        debug_log(&out);
-                        self.gl_ctx.bind_texture(gl::TEXTURE_2D, Some(tex).as_ref());
-                        self.gl_ctx.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, self.texture_mode as i32);
-                        self.gl_ctx.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, self.texture_mode as i32);
-                    } else {
-                        let out = format!("img_id {:?} is larger than tex_units {}", i, self.tex_units.len());
-                        debug_log(&out);
-                    }
-                }
+                // if let Some(bind_tex) = bind_tex {
+                    self.gl_ctx.bind_texture(gl::TEXTURE_2D, bind_tex.as_ref());
+                    self.gl_ctx.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, self.texture_mode as i32);
+                    self.gl_ctx.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, self.texture_mode as i32);
+                // }
+
                 self.check_ok(line!());
 
                 // Draw the triangles
