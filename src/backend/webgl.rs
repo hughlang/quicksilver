@@ -17,7 +17,7 @@ use stdweb::{
         html_element::CanvasElement,
         TypedArray
     },
-    unstable::{TryInto, TryFrom},
+    unstable::TryInto,
     console,
 };
 use webgl_stdweb::{
@@ -636,29 +636,10 @@ impl Backend for WebGLBackend {
 
                 let bind_tex = {
                     if let Some(img_id) = data.0 {
-
-        // let event: GamepadConnectedEvent = js!(
-        //     return new GamepadEvent("gamepadconnected");
-        // ).try_into().unwrap();                        
                         let a_ref = Reference::from_raw_unchecked(img_id as i32);
-                        // let result: WebGLTexture = a_ref.try_into().unwrap();
                         let result = WebGLTexture::from_reference_unchecked(a_ref);
-                        // let result = WebGLTexture::try_from(a_ref);
-                        // let result = a_ref.downcast::<WebGLTexture>();
-                        // let _ = WebGLTexture::from_raw_unchecked(a_ref);
-                        // let reference = js! { return new WebGLTexture(a_ref); }.into_reference().unwrap();
                         let out = format!("From img_id: {:?} tex={:?}", img_id, &result);
                         debug_log(&out);
-                        // let thing = a_ref.clone_from(source: &Self)
-                        // let result = a_ref.try_into();
-                        // let result = a_ref.clone().downcast::<WebGLTexture>();
-                        // if result.is_ok() {
-                        //     result.unwrap()
-                        // } else {
-                        //     None
-                        // }
-                        // let thing = WebGLTexture(a_ref);
-
                         Some(result)
                     } else {
                         debug_log("From texture");
@@ -666,7 +647,7 @@ impl Backend for WebGLBackend {
                     }
                 };
 
-                let out = format!("{}: {:?} bind_tex: {:?}", idx, data.1.clone(), bind_tex);
+                let out = format!("idx={}: {:?} bind_tex: {:?}", idx, data.1.clone(), bind_tex);
                 debug_log(&out);
 
                 self.gl_ctx.active_texture(gl::TEXTURE0 + idx as u32);

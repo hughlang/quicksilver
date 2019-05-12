@@ -104,11 +104,11 @@ impl Backend for GL3Backend {
     type Platform = WindowedContext;
 
     unsafe fn new(context: WindowedContext, texture_mode: ImageScaleStrategy, multisample: bool) -> Result<GL3Backend> {
-        // if gl::DebugMessageCallback::is_loaded() {
-        //     gl::Enable(gl::DEBUG_OUTPUT);
-        //     gl::DebugMessageCallback(debug_output_gl as GLDEBUGPROC, ptr::null());
-        //     gl::Enable(gl::DEBUG_OUTPUT_SYNCHRONOUS);
-        // }
+        if gl::DebugMessageCallback::is_loaded() {
+            gl::Enable(gl::DEBUG_OUTPUT);
+            gl::DebugMessageCallback(debug_output_gl as GLDEBUGPROC, ptr::null());
+            gl::Enable(gl::DEBUG_OUTPUT_SYNCHRONOUS);
+        }
 
         let texture_mode = match texture_mode {
             ImageScaleStrategy::Pixelate => gl::NEAREST,
@@ -165,9 +165,7 @@ impl Backend for GL3Backend {
 
         let texture_idx = backend.create_texture_unit(&texture)?;
         let unit = &backend.tex_units[texture_idx];
-        eprintln!("Created default texture_unit idx={} texture_id={} program_id={}", texture_idx, unit.texture_id, unit.program_id);
-        gl::LinkProgram(unit.program_id);
-        gl::UseProgram(unit.program_id);
+        eprintln!("### Created default texture_unit idx={} texture_id={} program_id={}", texture_idx, unit.texture_id, unit.program_id);
         gl_assert_ok!();
 
         Ok(backend)
@@ -195,6 +193,10 @@ impl Backend for GL3Backend {
 
     // TODO: Deprecate. Replaced with draw_tasks
     unsafe fn draw(&mut self, vertices: &[Vertex], triangles: &[GpuTriangle]) -> Result<()> {
+        // Not helpful
+        // let texture = &self.tex_units[0];
+        // gl::UseProgram(texture.program_id);
+
         // println!("### GL3 draw");
         // Turn the provided vertex data into stored vertex data
         vertices.iter().for_each(|vertex| {
@@ -307,9 +309,6 @@ impl Backend for GL3Backend {
         let data = if data.len() == 0 { nullptr() } else { data.as_ptr() as *const c_void };
         let format = format_gl(format);
         // gl::PixelStorei(gl::UNPACK_ALIGNMENT, 1);
-
-        // let texture = &self.tex_units[0];
-
         let id = {
             let mut texture = 0;
             gl::GenTextures(1, &mut texture as *mut u32);
@@ -324,8 +323,8 @@ impl Backend for GL3Backend {
         gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::NEAREST as i32);
         gl::TexImage2D(gl::TEXTURE_2D, 0, format as i32, width as i32,
                         height as i32, 0, format, gl::UNSIGNED_BYTE, data);
+        // gl::Enable(gl::TEXTURE_2D);  // triggers OpenGL warning
         // Note: this call is not necessary, but help some use cases.
-        gl::Enable(gl::TEXTURE_2D);
         gl::GenerateMipmap(gl::TEXTURE_2D);
         Ok(ImageData { id, width, height })
     }
@@ -442,17 +441,34 @@ impl Backend for GL3Backend {
     fn prepare_texture(&mut self, vertex_shader: &str, fragment_shader: &str) -> Result<usize> {
 
         unsafe {
+            gl::BindTexture(gl::TEXTURE_2D, 0);
 
             let vertex_id = self.compile_shader(vertex_shader, gl::VERTEX_SHADER).unwrap();
             let fragment_id = self.compile_shader(fragment_shader, gl::FRAGMENT_SHADER).unwrap();
             let program_id = self.link_program(vertex_id, fragment_id).unwrap();
-            let texture_id = {
-                let mut texture = 0;
-                gl::GenTextures(1, &mut texture as *mut u32);
-                texture
-            };
-            gl_assert_ok!();
+            let mut texture_id = 0;
+            gl::GenTextures(1, &mut texture_id);
+
+            let idx = self.tex_units.len();
+            // gl::ActiveTexture(gl::TEXTURE0 + idx as u32);
+            gl::BindTexture(gl::TEXTURE_2D, texture_id);
+            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::CLAMP_TO_EDGE as i32);
+            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::CLAMP_TO_EDGE as i32);
+            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::NEAREST as i32);
+            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::NEAREST as i32);
+
+            // if gl::IsTexture(texture_id) == gl::TRUE {
+            //     eprintln!("{:?} is a texture", texture_id);
+            // } else {
+            //     eprintln!("{:?} is NOT a texture", texture_id);
+            // }         
+            // gl_assert_ok!();
+            eprintln!("===========================================================");
             eprintln!(">>> Created program_id={} vertex_id={} fragment_id={} texture_id={}", program_id, vertex_id, fragment_id, texture_id);
+
+            // let raw = CString::new("font_tex").expect("No tex").into_raw();
+            // let location = gl::GetUniformLocation(program_id, raw as *const i8);
+            // eprintln!(">>> texture location={:?} for program_id={:?}", location, program_id);
 
             // Create a no-op serializer function
             let serializer = |_vertex| -> Vec<f32> {
@@ -469,7 +485,7 @@ impl Backend for GL3Backend {
             };
 
             self.tex_units.push(unit);
-            return Ok(self.tex_units.len() - 1);
+            return Ok(idx);
         }
     }
 
@@ -481,35 +497,41 @@ impl Backend for GL3Backend {
             return Err(QuicksilverError::ContextError(message));
         }
         let texture = &mut self.tex_units[idx];
-        // let texture_id = texture.texture_id;
+        let texture_id = texture.texture_id;
         let program_id = texture.program_id;
         self.tex_units[idx].serializer = Box::new(cb);
 
         let float_size = size_of::<f32>() as u32;
         let vert_size = fields.iter().fold(0, |acc, x| acc + x.1);
         let stride_distance = (vert_size * float_size) as i32;
-
+        eprintln!("Configuring texture idx={}, texture_id={} vert_size={} float_size={}", idx, texture_id, vert_size, float_size);
 
         unsafe {
             // gl::LinkProgram(unit.program_id);
             gl::UseProgram(program_id);
-
+            gl::BindTexture(gl::TEXTURE_2D, texture_id);
+            // gl::ActiveTexture(gl::TEXTURE0 + idx as u32);
+            // gl::Enable(gl::TEXTURE_2D);
             // gl::Enable(gl::BLEND);
             // gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
-            // gl::BindTexture(gl::TEXTURE_2D, texture_id);
 
-            let raw = CString::new(tex_name).expect("No tex").into_raw();
-            let location = gl::GetUniformLocation(program_id, raw as *const i8);
-            // if location >= 0 {
-                self.tex_units[idx].location_id = location;
-            // }
-            gl::Uniform1i(location, idx as i32);
+            let raw = CString::new(tex_name).expect("No color name").into_raw();
+            let location = gl::GetUniformLocation(program_id, raw as *mut i8);
+            self.tex_units[idx].location_id = location;
             eprintln!(">>> texture location={:?} for program_id={:?}", location, program_id);
+            CString::from_raw(raw);
+
+            // Map the out_color variable name to the fragment shader output
+            let raw = CString::new(out_color).expect("No color name").into_raw();
+            // eprintln!("configure_fields program_id={:?} color key={:?}", program_id, out_color);
+            gl::BindFragDataLocation(program_id, idx as u32, raw as *mut i8);
+            CString::from_raw(raw);
+            gl_assert_ok!();
 
             let mut offset = 0;
             for (v_field, float_count) in fields {
-                // eprintln!("stride_distance={:?} offset={:?}", stride_distance, offset);
                 let count = *float_count;
+                eprintln!("[{:?}] stride_distance={:?} offset={:?}", &v_field, stride_distance, offset);
                 let c_name = CString::new(v_field.to_string()).expect("No interior null bytes in shader").into_raw();
                 let attr = gl::GetAttribLocation(program_id, c_name as *const i8);
                 CString::from_raw(c_name);
@@ -517,6 +539,8 @@ impl Backend for GL3Backend {
                     eprintln!("configure_fields error: attr={:?} y={:?}", attr, 0);
                     return Err(QuicksilverError::ContextError(format!("{} GetAttribLocation -> {}", v_field, attr)));
                 }
+
+                gl::EnableVertexAttribArray(attr as u32);
                 gl::VertexAttribPointer(
                     attr as u32,
                     count as i32,
@@ -525,17 +549,10 @@ impl Backend for GL3Backend {
                     stride_distance,
                     offset as _,
                 );
-                gl::EnableVertexAttribArray(attr as u32);
 
                 offset += count * float_size;
             }
 
-            // Map the out_color variable name to the fragment shader output
-            let raw = CString::new(out_color).expect("No interior null bytes in shader").into_raw();
-            eprintln!("configure_fields program_id={:?} color key={:?}", program_id, out_color);
-            gl::BindFragDataLocation(program_id, idx as u32, raw as *mut i8);
-            CString::from_raw(raw);
-            gl_assert_ok!();
             Ok(())
         }
     }
@@ -551,40 +568,43 @@ impl Backend for GL3Backend {
 
             let data = if data.len() == 0 { nullptr() } else { data.as_ptr() as *const c_void };
             let format = format_gl(format);
-            eprintln!(">>> Upload Texture: idx={} for texture_id={:?}", idx, texture.texture_id);
             // This 1 value only valid for single channel (RED). https://www.khronos.org/opengl/wiki/Common_Mistakes
             gl::PixelStorei(gl::UNPACK_ALIGNMENT, 1);
-            gl::ActiveTexture(gl::TEXTURE0 + idx as u32);
+            // gl::ActiveTexture(gl::TEXTURE0 + idx as u32);
             gl::BindTexture(gl::TEXTURE_2D, texture.texture_id);
             gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::CLAMP_TO_EDGE as i32);
             gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::CLAMP_TO_EDGE as i32);
             gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::LINEAR as i32);
             gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as i32);
-
+            // gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_BASE_LEVEL, 0);
+            // gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAX_LEVEL, 0);
             gl::TexImage2D(gl::TEXTURE_2D, 0, format as i32, width as i32,
                             height as i32, 0, format, gl::UNSIGNED_BYTE, data);
-            gl::Enable(gl::TEXTURE_2D);
+
+            eprintln!(">>> Uploaded Texture: idx={} for texture_id={:?} size={}x{}", idx, texture.texture_id, width, height);
             // Note: this call is not necessary, but help some use cases.
             // gl::GenerateMipmap(gl::TEXTURE_2D);
-            gl_assert_ok!();
+            gl::BindTexture(gl::TEXTURE_2D, 0);
+
             Ok(ImageData { id: texture.texture_id, width, height })
         }
     }
 
     fn update_texture(&mut self, idx: usize, data: &[u8], rect: &Rectangle, format: PixelFormat) -> Result<()> {
-        // eprintln!("Updating texture_id={:?} rect={:?}", texture_id, rect);
         if idx >= self.tex_units.len() {
             let message = format!("Texture index {} out of bounds for len={}", idx, self.tex_units.len());
             return Err(QuicksilverError::ContextError(message));
         }
         let texture = &self.tex_units[idx];
+        eprintln!("Updating [{}] texture_id={:?} rect={:?}", idx, texture.texture_id, rect);
+        let format = format_gl(format);
+        let id = texture.texture_id;
 
         unsafe {
-            let format = format_gl(format);
-            let id = texture.texture_id;
             // https://developer.mozilla.org/en-US/docs/Web/API/WebGLRenderingContext/texSubImage2D
             gl::UseProgram(texture.program_id);
             gl::BindTexture(gl::TEXTURE_2D, id);
+            gl::Uniform1i(texture.location_id, idx as i32);
             gl::TexSubImage2D(
                 gl::TEXTURE_2D,
                 0,
@@ -611,6 +631,13 @@ impl Backend for GL3Backend {
             }
             let idx = task.texture_idx as u32;
             let texture = &self.tex_units[task.texture_idx];
+            gl::ActiveTexture(gl::TEXTURE0 + idx);
+                // if idx > 0 {
+                // gl::Uniform1i(texture.location_id, idx as i32);
+                // }
+
+            gl::UseProgram(texture.program_id);
+
 
             let mut vertices: Vec<f32> = Vec::new();
             let mut cb = &texture.serializer;
@@ -619,13 +646,13 @@ impl Backend for GL3Backend {
                 vertices.append(&mut verts);
             }
             let vertex_length = size_of::<f32>() * vertices.len();
-            let vertex_data = vertices.as_ptr() as *const c_void;
             if vertex_length > self.vertex_length {
                 eprintln!(">>> vertex_length new={:?} was={:?}", vertex_length, self.vertex_length);
                 self.vertex_length = vertex_length * 2;
                 // Create the vertex array
                 gl::BufferData(gl::ARRAY_BUFFER, self.vertex_length as isize, nullptr(), gl::STREAM_DRAW);
             }
+            let vertex_data = vertices.as_ptr() as *const c_void;
             gl::BufferSubData(gl::ARRAY_BUFFER, 0, vertex_length as isize, vertex_data);
 
             let ranges: Vec<(Option<u32>, Range<usize>)> = {
@@ -685,14 +712,10 @@ impl Backend for GL3Backend {
                         texture.texture_id
                     }
                 };
-
-                // eprintln!("{} texture_id={:?} program_id={:?}", idx, texture_id, texture.program_id);
-
-                gl::UseProgram(texture.program_id);
-                gl::ActiveTexture(gl::TEXTURE0 + idx);
                 if idx > 0 {
-                    gl::Uniform1i(texture.location_id, idx as i32);
+                    eprintln!("{} texture_id={:?} program_id={:?}", idx, texture_id, texture.program_id);
                 }
+
                 gl::BindTexture(gl::TEXTURE_2D, texture_id);
                 gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, self.texture_mode as i32);
                 gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, self.texture_mode as i32);

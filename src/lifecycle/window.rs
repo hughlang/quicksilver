@@ -539,16 +539,9 @@ impl Window {
         unsafe { instance() }
     }
 
-    /// Given a Texture object, create and register a TextureUnit in the backend.texture_units array
-    /// Return the index value to reference this TextureUnit. See the new() constructor in GL3Backend for an
-    /// example on usage, where the default texture is created and saved.
-    pub fn create_texture_unit(&mut self, texture: &Texture) -> Result<(usize)> {
-        self.backend().create_texture_unit(texture)
-    }
-
     /// Passthru method to access the backend OpenGL/WebGL method
-    pub fn create_texture(&mut self, data: &[u8], width: u32, height: u32, format: PixelFormat) -> Result<ImageData> {
-        unsafe { self.backend().create_texture(data, width, height, format) }
+    pub fn create_texture(&mut self, texture: &Texture) -> Result<usize> {
+        unsafe { self.backend().create_texture_unit(texture) }
     }
 
     /// Passthru method to access the backend OpenGL/WebGL method.

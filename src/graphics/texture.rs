@@ -4,6 +4,7 @@
 use crate::{
     Result,
     backend::{Backend, instance},
+    geom::Rectangle,
     graphics::{GpuTriangle, PixelFormat, Vertex},
     lifecycle::Window,
 };
@@ -68,11 +69,31 @@ impl Texture {
         self
     }
 
-    /// Final builder method in the constructor chaine
-    pub fn upload(&self, idx: usize, data: &[u8], width: u32, height: u32, format: PixelFormat, window: &mut Window) -> Result<()> {
-        let _ = window.backend().upload_texture(idx, data, width, height, format);
+    /// Calls create_texture_unit. Mostly useful if called from external project after creating the Texture instance.
+    pub fn build(&self) -> Result<usize> {
+        unsafe {
+            let idx = instance().create_texture_unit(&self)?;
+            Ok(idx)
+        }
+    }
+
+    /// Assuming this Texture was created using with_shaders, with_fields, and build, use the texture idx value
+    /// to upload data (sometimes empty) with specified width and height to the GPU.  
+    pub fn upload(&self, idx: usize, data: &[u8], width: u32, height: u32, format: PixelFormat) -> Result<()> {
+        unsafe {
+            let _ = instance().upload_texture(idx, data, width, height, format);
+        }
         Ok(())
     }
+
+    /// Update an existing texture. Passthru to backend method
+    pub fn update(idx: usize, data: &[u8], rect: &Rectangle, format: PixelFormat) -> Result<()> {
+        unsafe {
+            instance().update_texture(idx, data, rect, format)?;
+        }
+        Ok(())
+    }
+
 }
 
 /// A temporary object holding the vertices and triangles to be drawn by the backend.
@@ -82,8 +103,6 @@ impl Texture {
 pub struct DrawTask {
     /// The index value of the TextureUnit in backend.texture_units
     pub texture_idx: usize,
-    /// Optional texture_id for convenience. Not compatible with webgl though
-    pub texture_id: Option<u32>,
     /// All the vertices in the task
     pub vertices: Vec<Vertex>,
     /// All the triangles in the task
@@ -95,7 +114,6 @@ impl DrawTask {
     pub fn new(id: usize) -> Self {
         DrawTask {
             texture_idx: id,
-            texture_id: None,
             vertices: Vec::new(),
             triangles: Vec::new(),
         }
