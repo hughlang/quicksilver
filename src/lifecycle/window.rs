@@ -30,7 +30,7 @@ use {
 #[cfg(not(target_arch = "wasm32"))]
 use {
     gl,
-    glutin::{self, EventsLoop, ContextTrait, Icon}
+    glutin::{self, EventsLoop, ContextTrait, GlProfile, GlRequest, Icon, Robustness}
 };
 
 
@@ -115,7 +115,13 @@ impl Window {
         };
         let context = glutin::ContextBuilder::new()
             .with_vsync(settings.vsync)
-            .with_multisampling(settings.multisampling.unwrap_or(0));
+            // .with_multisampling(settings.multisampling.unwrap_or(0))
+            // .with_pixel_format(color_bits: u8, alpha_bits: u8)
+            .with_gl_profile(GlProfile::Compatibility)
+            .with_gl_robustness(Robustness::TryRobustLoseContextOnReset)
+            .with_gl_debug_flag(true)
+            .with_srgb(true)
+            ;
         let gl_window = glutin::WindowedContext::new_windowed(window, context, &events)?;
         unsafe {
             gl_window.make_current()?;
@@ -538,6 +544,10 @@ impl Window {
     pub(crate) fn backend(&mut self) -> &'static mut BackendImpl {
         unsafe { instance() }
     }
+
+    // pub fn build_textures(&mut self, textures: &Vec<Texture>) -> Result<Vec<usize>> {
+    //     let id_list = self.backend().assign_texture_units(&textures);
+    // }
 
     /// Passthru method to access the backend OpenGL/WebGL method
     pub fn create_texture(&mut self, texture: &Texture) -> Result<usize> {

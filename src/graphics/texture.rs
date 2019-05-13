@@ -77,11 +77,29 @@ impl Texture {
         }
     }
 
+    /// Call from external to create the texture unit
+    /// TODO: Verify that it does not exist
+    pub fn activate(&mut self) -> Result<usize> {
+        unsafe {
+            let idx = instance().create_texture_unit(&self)?;
+            Ok(idx)
+        }
+    }
+
+    /// Call from external to remove this texture
+    pub fn deactivate(&mut self) -> Result<()> {
+        unsafe {
+            Ok(())
+        }
+    }
+
     /// Assuming this Texture was created using with_shaders, with_fields, and build, use the texture idx value
     /// to upload data (sometimes empty) with specified width and height to the GPU.  
     pub fn upload(&self, idx: usize, data: &[u8], width: u32, height: u32, format: PixelFormat) -> Result<()> {
         unsafe {
-            let _ = instance().upload_texture(idx, data, width, height, format);
+            let img = instance().upload_texture(idx, data, width, height, format)?;
+            eprintln!(">>> Texture.upload(): idx={} for texture_id={:?} size={}x{}", idx, img.id, width, height);
+
         }
         Ok(())
     }
