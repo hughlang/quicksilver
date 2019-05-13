@@ -115,7 +115,7 @@ impl Window {
         };
         let context = glutin::ContextBuilder::new()
             .with_vsync(settings.vsync)
-            // .with_multisampling(settings.multisampling.unwrap_or(0))
+            .with_multisampling(settings.multisampling.unwrap_or(0))
             // .with_pixel_format(color_bits: u8, alpha_bits: u8)
             .with_gl_profile(GlProfile::Compatibility)
             .with_gl_robustness(Robustness::TryRobustLoseContextOnReset)
