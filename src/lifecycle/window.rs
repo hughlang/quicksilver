@@ -30,7 +30,7 @@ use {
 #[cfg(not(target_arch = "wasm32"))]
 use {
     gl,
-    glutin::{self, EventsLoop, ContextTrait, GlProfile, GlRequest, Icon, Robustness}
+    glutin::{self, Api, EventsLoop, ContextTrait, GlProfile, GlRequest, Icon, Robustness}
 };
 
 
@@ -114,6 +114,7 @@ impl Window {
             window = window.with_max_dimensions(v.into());
         };
         let context = glutin::ContextBuilder::new()
+            // .with_gl(GlRequest::Specific(Api::OpenGl, (3, 2)))
             .with_vsync(settings.vsync)
             .with_multisampling(settings.multisampling.unwrap_or(0))
             // .with_pixel_format(color_bits: u8, alpha_bits: u8)

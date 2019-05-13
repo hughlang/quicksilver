@@ -179,6 +179,7 @@ impl Backend for GL3Backend {
         let unit = &backend.tex_units[texture_idx];
         backend.shader = unit.program_id;
         eprintln!("### Created default texture_unit idx={} texture_id={} program_id={}", texture_idx, unit.texture_id, unit.program_id);
+        // let result = backend.upload_texture(0, &[], 1024, 1024, PixelFormat::RGBA);
         gl_assert_ok!();
 
         Ok(backend)
@@ -440,18 +441,6 @@ impl Backend for GL3Backend {
         self.context.set_inner_size(size.into());
     }
 
-    // fn assign_texture_units(&mut self, textures: Vec<Texture>) -> Result<Vec<usize>> {
-    //     let results: Vec<usize> = Vec::new();
-    //     unsafe {
-    //         let mut buffers = [0, 0];
-    //         gl::GenBuffers(2, (&mut buffers).as_mut_ptr());
-
-            
-    //     }
-
-    //     results
-    // } 
-
     /// Create and register a TextureUnit in self.tex_units given the Texture object which
     /// contains all of the parameters needed. This does not create or upload a texture, which
     /// is a secondary step.
@@ -465,7 +454,7 @@ impl Backend for GL3Backend {
     fn prepare_texture(&mut self, vertex_shader: &str, fragment_shader: &str) -> Result<usize> {
 
         unsafe {
-            gl::BindTexture(gl::TEXTURE_2D, 0);
+            // gl::BindTexture(gl::TEXTURE_2D, 0);
 
             let vertex_id = self.compile_shader(vertex_shader, gl::VERTEX_SHADER).unwrap();
             let fragment_id = self.compile_shader(fragment_shader, gl::FRAGMENT_SHADER).unwrap();
@@ -473,7 +462,7 @@ impl Backend for GL3Backend {
             let texture_id = 0;  // Initially set to 0. Will be assigned in upload_texture
 
             let idx = self.tex_units.len();
-            eprintln!("===========================================================");
+            eprintln!("==Prepare=========================================================");
             eprintln!(">>> Created program_id={} vertex_id={} fragment_id={} texture_id={}", program_id, vertex_id, fragment_id, texture_id);
 
             // Create a no-op serializer function
@@ -569,8 +558,10 @@ impl Backend for GL3Backend {
             let gl_format = format_gl(format);
             let gl_bytes = byte_size(format);
 
+            gl::BindTexture(gl::TEXTURE_2D, 0);
+
             // This 1 value only valid for single channel (RED). https://www.khronos.org/opengl/wiki/Common_Mistakes
-            gl::PixelStorei(gl::UNPACK_ALIGNMENT, gl_bytes as i32);
+            // gl::PixelStorei(gl::UNPACK_ALIGNMENT, gl_bytes as i32);
 
             let mut texture_id = 0;
             // https://www.khronos.org/opengl/wiki/GLSL_Sampler#Binding_textures_to_samplers
@@ -581,17 +572,22 @@ impl Backend for GL3Backend {
             gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::CLAMP_TO_EDGE as i32);
             gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::NEAREST as i32);
             gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::NEAREST as i32);
-
+            gl::Enable(gl::TEXTURE_2D);
             // Save the new id for later use
-            texture.texture_id = texture_id;
+            // texture.texture_id = texture_id;
             let data = if data.len() == 0 { nullptr() } else { data.as_ptr() as *const c_void };
             gl::TexImage2D(gl::TEXTURE_2D, 0, gl_format as i32, width as i32,
                             height as i32, 0, gl_format, gl::UNSIGNED_BYTE, data);
 
             // Note: this call is not necessary, but help some use cases.
             // gl::GenerateMipmap(gl::TEXTURE_2D);
-            gl::BindTexture(gl::TEXTURE_2D, 0);
 
+            let mut tex_width: i32 = 0;
+            let mut tex_height: i32 = 0;
+            gl::GetTexLevelParameteriv(gl::TEXTURE_2D, 0, gl::TEXTURE_WIDTH, &mut tex_width);
+            gl::GetTexLevelParameteriv(gl::TEXTURE_2D, 0, gl::TEXTURE_HEIGHT, &mut tex_height);
+
+            eprintln!(">>> TEX width={:?} height={:?}", tex_width, tex_height);
             eprintln!(">>> Uploaded Texture: idx={} for texture_id={:?} size={}x{}", idx, texture.texture_id, width, height);
             Ok(ImageData { id: texture.texture_id, width, height })
         }
@@ -615,18 +611,19 @@ impl Backend for GL3Backend {
                 eprintln!("{:?} is a texture", id);
             } else {
                 eprintln!("{:?} is NOT a texture", id);
+                // return Ok(());
             }         
 
             gl::ActiveTexture(gl::TEXTURE0 + idx as u32);
             // https://www.khronos.org/opengl/wiki/GLAPI/glTexSubImage2D
             gl::BindTexture(gl::TEXTURE_2D, id);
-            gl::Uniform1i(texture.location_id, idx as i32);
+            // gl::Uniform1i(texture.location_aid, idx as i32);
 
-            let mut width: i32 = 0;
-            let mut height: i32 = 0;
+            let mut width: i32 = -1;
+            let mut height: i32 = -1;
             gl::GetTexLevelParameteriv(gl::TEXTURE_2D, 0, gl::TEXTURE_WIDTH, &mut width);
             gl::GetTexLevelParameteriv(gl::TEXTURE_2D, 0, gl::TEXTURE_HEIGHT, &mut height);
-            eprintln!("TEX width={:?} height={:?}", width, height);
+            eprintln!("TEX id={:?} width={:?} height={:?}", id, width, height);
 
             gl::TexSubImage2D(
                 gl::TEXTURE_2D,
@@ -657,7 +654,7 @@ impl Backend for GL3Backend {
             let texture_id = texture.texture_id;
             gl::ActiveTexture(gl::TEXTURE0 + idx);
             gl::UseProgram(texture.program_id);
-            // gl::Uniform1i(texture.location_id, idx as i32);
+            gl::Uniform1i(texture.location_id, idx as i32);
 
             // if gl::IsTexture(texture.texture_id) == gl::TRUE {
             //     eprintln!("{:?} is a texture", texture_id);
