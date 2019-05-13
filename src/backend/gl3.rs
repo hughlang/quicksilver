@@ -620,7 +620,7 @@ impl Backend for GL3Backend {
             gl::ActiveTexture(gl::TEXTURE0 + idx as u32);
             // https://www.khronos.org/opengl/wiki/GLAPI/glTexSubImage2D
             gl::BindTexture(gl::TEXTURE_2D, id);
-            // gl::Uniform1i(texture.location_id, idx as i32);
+            gl::Uniform1i(texture.location_id, idx as i32);
 
             let mut width: i32 = 0;
             let mut height: i32 = 0;
