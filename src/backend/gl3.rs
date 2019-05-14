@@ -7,7 +7,9 @@ use crate::{
     input::MouseCursor
 };
 use gl::types::*;
-use glutin::{ContextTrait, WindowedContext, dpi::LogicalSize};
+use glutin::{
+    ContextTrait, WindowedContext, dpi::LogicalSize,
+};
 use std::{
     ffi::{CStr, CString},
     mem::size_of,
@@ -118,7 +120,7 @@ impl Backend for GL3Backend {
             gl::DebugMessageCallback(debug_output_gl as GLDEBUGPROC, ptr::null());
             gl::Enable(gl::DEBUG_OUTPUT_SYNCHRONOUS);
         }
-        // eprintln!("GL3.new OpenGL version{:?}", context.context().get
+        eprintln!("GL3.new OpenGL version{:?}", context.context().get_api());
         let texture_mode = match texture_mode {
             ImageScaleStrategy::Pixelate => gl::NEAREST,
             ImageScaleStrategy::Blur => gl::LINEAR
@@ -603,16 +605,16 @@ impl Backend for GL3Backend {
 
         let gl_format = format_gl(format);
         let gl_bytes = byte_size(format);
-        eprintln!("Updating [{}] texture_id={:?} rect={:?} format={:?}", idx, id, rect, gl_format);
+        // eprintln!("Updating [{}] texture_id={:?} rect={:?} format={:?}", idx, id, rect, gl_format);
 
         unsafe {
             // gl::PixelStorei(gl::UNPACK_ALIGNMENT, gl_bytes as i32);
-            if gl::IsTexture(id) == gl::TRUE {
-                eprintln!("{:?} is a texture", id);
-            } else {
-                eprintln!("{:?} is NOT a texture", id);
-                // return Ok(());
-            }         
+            // if gl::IsTexture(id) == gl::TRUE {
+            //     eprintln!("{:?} is a texture", id);
+            // } else {
+            //     eprintln!("{:?} is NOT a texture", id);
+            //     // return Ok(());
+            // }         
 
             gl::ActiveTexture(gl::TEXTURE0 + idx as u32);
             // https://www.khronos.org/opengl/wiki/GLAPI/glTexSubImage2D
@@ -623,7 +625,7 @@ impl Backend for GL3Backend {
             let mut height: i32 = -1;
             gl::GetTexLevelParameteriv(gl::TEXTURE_2D, 0, gl::TEXTURE_WIDTH, &mut width);
             gl::GetTexLevelParameteriv(gl::TEXTURE_2D, 0, gl::TEXTURE_HEIGHT, &mut height);
-            eprintln!("TEX id={:?} width={:?} height={:?}", id, width, height);
+            // eprintln!("TEX id={:?} width={:?} height={:?}", id, width, height);
 
             gl::TexSubImage2D(
                 gl::TEXTURE_2D,

@@ -514,7 +514,7 @@ impl Backend for WebGLBackend {
                 return Err(QuicksilverError::ContextError(message));
             }
             let mut texture = &mut self.tex_units[idx];
-            let format = format_gl(format);
+            let gl_format = format_gl(format);
 
             self.gl_ctx.bind_texture(gl::TEXTURE_2D, Some(&texture.texture_id));
             self.gl_ctx.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::CLAMP_TO_EDGE as i32);
@@ -522,7 +522,7 @@ impl Backend for WebGLBackend {
             self.gl_ctx.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::NEAREST as i32);
             self.gl_ctx.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::NEAREST as i32);
             let format = format as u32;
-            self.gl_ctx.tex_image2_d(gl::TEXTURE_2D, 0, gl::RGBA as i32, width as i32, height as i32, 0, format, gl::UNSIGNED_BYTE, Some(data));
+            self.gl_ctx.tex_image2_d(gl::TEXTURE_2D, 0, gl_format as i32, width as i32, height as i32, 0, gl_format, gl::UNSIGNED_BYTE, Some(data));
             // self.gl_ctx.generate_mipmap(gl::TEXTURE_2D);
             self.check_ok(line!());
             Ok(ImageData { id: idx as u32, width, height })
@@ -638,8 +638,8 @@ impl Backend for WebGLBackend {
                     if let Some(img_id) = data.0 {
                         let a_ref = Reference::from_raw_unchecked(img_id as i32);
                         let result = WebGLTexture::from_reference_unchecked(a_ref);
-                        let out = format!("From img_id: {:?} tex={:?}", img_id, &result);
-                        debug_log(&out);
+                        // let out = format!("From img_id: {:?} tex={:?}", img_id, &result);
+                        // debug_log(&out);
                         Some(result)
                     } else {
                         debug_log("From texture");
@@ -647,13 +647,13 @@ impl Backend for WebGLBackend {
                     }
                 };
 
-                let out = format!("idx={}: {:?} bind_tex: {:?}", idx, data.1.clone(), bind_tex);
-                debug_log(&out);
+                // let out = format!("idx={}: {:?} bind_tex: {:?}", idx, data.1.clone(), bind_tex);
+                // debug_log(&out);
 
                 self.gl_ctx.active_texture(gl::TEXTURE0 + idx as u32);
-                if idx > 0 {
                     self.gl_ctx.uniform1i(texture.location_id.as_ref(), idx as i32);
-                }
+                // if idx > 0 {
+                // }
 
                 // if let Some(bind_tex) = bind_tex {
                     self.gl_ctx.bind_texture(gl::TEXTURE_2D, bind_tex.as_ref());
@@ -661,11 +661,11 @@ impl Backend for WebGLBackend {
                     self.gl_ctx.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, self.texture_mode as i32);
                 // }
 
-                self.check_ok(line!());
+                // self.check_ok(line!());
 
                 // Draw the triangles
                 self.gl_ctx.draw_elements(gl::TRIANGLES, indices.len() as i32, gl::UNSIGNED_INT, 0);
-                self.check_ok(line!());
+                // self.check_ok(line!());
             }
         }
         Ok(())
