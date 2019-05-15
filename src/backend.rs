@@ -56,7 +56,7 @@ pub(crate) trait Backend {
             GpuTriangle::new(0, [0, 1, 2], 0.0, Col(color)),
             GpuTriangle::new(0, [2, 3, 0], 0.0, Col(color))
         ])?;
-        self.flush();
+        self.flush()?;
         Ok(())
     }
 }

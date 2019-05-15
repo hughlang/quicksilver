@@ -8,7 +8,7 @@ use crate::{
 };
 use gl::types::*;
 use glutin::{
-    ContextTrait, WindowedContext, dpi::LogicalSize,
+    WindowedContext, dpi::LogicalSize,
 };
 use std::{
     ffi::{CStr, CString},
@@ -33,26 +33,6 @@ extern "system" fn debug_output_gl(_source: GLenum, _type: GLenum, _id: GLuint, 
         };
         let text = slice.to_str().unwrap();
         eprintln!("OpenGL Debug: {}", text);
-    }
-}
-
-macro_rules! gl_assert_ok {
-    () => {{
-        // let err = gl::GetError();
-        // assert_eq!(err, gl::NO_ERROR, "{}", gl_err_to_str(err));
-    }};
-}
-
-fn gl_err_to_str(err: u32) -> &'static str {
-    match err {
-        gl::INVALID_ENUM => "INVALID_ENUM",
-        gl::INVALID_VALUE => "INVALID_VALUE",
-        gl::INVALID_OPERATION => "INVALID_OPERATION",
-        gl::INVALID_FRAMEBUFFER_OPERATION => "INVALID_FRAMEBUFFER_OPERATION",
-        gl::OUT_OF_MEMORY => "OUT_OF_MEMORY",
-        gl::STACK_UNDERFLOW => "STACK_UNDERFLOW",
-        gl::STACK_OVERFLOW => "STACK_OVERFLOW",
-        _ => "Unknown error",
     }
 }
 
@@ -115,12 +95,11 @@ impl Backend for GL3Backend {
     type Platform = WindowedContext;
 
     unsafe fn new(context: WindowedContext, texture_mode: ImageScaleStrategy, multisample: bool) -> Result<GL3Backend> {
-        if gl::DebugMessageCallback::is_loaded() {
-            gl::Enable(gl::DEBUG_OUTPUT);
-            gl::DebugMessageCallback(debug_output_gl as GLDEBUGPROC, ptr::null());
-            gl::Enable(gl::DEBUG_OUTPUT_SYNCHRONOUS);
-        }
-        eprintln!("GL3.new OpenGL version{:?}", context.context().get_api());
+        // if gl::DebugMessageCallback::is_loaded() {
+        //     gl::Enable(gl::DEBUG_OUTPUT);
+        //     gl::DebugMessageCallback(debug_output_gl as GLDEBUGPROC, ptr::null());
+        //     gl::Enable(gl::DEBUG_OUTPUT_SYNCHRONOUS);
+        // }
         let texture_mode = match texture_mode {
             ImageScaleStrategy::Pixelate => gl::NEAREST,
             ImageScaleStrategy::Blur => gl::LINEAR
@@ -131,6 +110,7 @@ impl Backend for GL3Backend {
             array
         };
         gl::BindVertexArray(vao);
+        println!(">>> BindVertexArray");
         let mut buffers = [0, 0];
         gl::GenBuffers(2, (&mut buffers).as_mut_ptr());
         let [vbo, ebo] = buffers;
@@ -143,10 +123,9 @@ impl Backend for GL3Backend {
             gl::ONE_MINUS_SRC_ALPHA,
         );
         gl::Enable(gl::BLEND);
-        gl::Enable(gl::FRAMEBUFFER_SRGB);
-        gl::ClearColor(0.02, 0.02, 0.02, 1.0);
-
-        gl_assert_ok!();
+        println!(">>> gl::Enable(gl::BLEND)");
+        // gl::Enable(gl::FRAMEBUFFER_SRGB);
+        // gl::ClearColor(0.02, 0.02, 0.02, 1.0);
 
         if multisample {
             gl::Enable(gl::MULTISAMPLE);
@@ -156,7 +135,7 @@ impl Backend for GL3Backend {
         let fragment: u32 = 0;
         let vertex:u32 = 0;
 
-        // eprintln!("### GL3Backend.new – Using program={:?} raw outColor={:?}", shader, raw);
+        eprintln!("### GL3Backend.new – Using program={:?} raw y={:?}", shader, 0);
         let mut backend = GL3Backend {
             context,
             texture: NULL_TEXTURE_ID,
@@ -182,7 +161,7 @@ impl Backend for GL3Backend {
         backend.shader = unit.program_id;
         eprintln!("### Created default texture_unit idx={} texture_id={} program_id={}", texture_idx, unit.texture_id, unit.program_id);
         // let result = backend.upload_texture(0, &[], 1024, 1024, PixelFormat::RGBA);
-        gl_assert_ok!();
+
 
         Ok(backend)
     }
@@ -240,7 +219,7 @@ impl Backend for GL3Backend {
             let use_texture_string = CString::new("uses_texture").expect("No interior null bytes in shader").into_raw();
             // Create the vertex array
             gl::BufferData(gl::ARRAY_BUFFER, self.vertex_length as isize, nullptr(), gl::STREAM_DRAW);
-            gl_assert_ok!();
+
             let stride_distance = (VERTEX_SIZE * size_of::<f32>()) as i32;
             // Set up the vertex attributes
             let pos_attrib = gl::GetAttribLocation(self.shader, position_string as *const i8) as u32;
@@ -265,11 +244,11 @@ impl Backend for GL3Backend {
             CString::from_raw(color_string);
             CString::from_raw(tex_string);
             CString::from_raw(use_texture_string);
-            // gl_assert_ok!();
+            //
         }
         let vertex_data = self.vertices.as_ptr() as *const c_void;
         gl::BufferSubData(gl::ARRAY_BUFFER, 0, vertex_length as isize, vertex_data);
-        // gl_assert_ok!();
+        //
 
         // Scan through the triangles, adding the indices to the index buffer (every time the
         // texture switches, flush and switch the bound texture)
@@ -284,7 +263,7 @@ impl Backend for GL3Backend {
             self.indices.extend(triangle.indices.iter());
         }
         // Flush any remaining triangles
-        self.flush();
+        self.flush()?;
         self.vertices.clear();
         Ok(())
     }
@@ -614,7 +593,7 @@ impl Backend for GL3Backend {
             // } else {
             //     eprintln!("{:?} is NOT a texture", id);
             //     // return Ok(());
-            // }         
+            // }
 
             gl::ActiveTexture(gl::TEXTURE0 + idx as u32);
             // https://www.khronos.org/opengl/wiki/GLAPI/glTexSubImage2D
@@ -663,8 +642,8 @@ impl Backend for GL3Backend {
             // } else {
             //     eprintln!("{:?} is NOT a texture", texture_id);
             //     // return Ok(());
-            // }         
-            
+            // }
+
 
             let mut vertices: Vec<f32> = Vec::new();
             let mut cb = &texture.serializer;
@@ -744,7 +723,7 @@ impl Backend for GL3Backend {
                 // }
 
                 gl::BindTexture(gl::TEXTURE_2D, texture_id);
-                // gl::Uniform1i(texture.location_id, idx as i32);                
+                // gl::Uniform1i(texture.location_id, idx as i32);
                 gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, self.texture_mode as i32);
                 gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, self.texture_mode as i32);
 
@@ -763,13 +742,13 @@ impl GL3Backend {
         let shader;
         unsafe {
             shader = gl::CreateShader(stype);
-            gl_assert_ok!();
+
             // Attempt to compile the shader
             let c_str = CString::new(src.as_bytes()).expect("No interior null bytes in shader").into_raw();
             gl::ShaderSource(shader, 1, &(c_str as *const i8) as *const *const i8, nullptr());
             CString::from_raw(c_str);
             gl::CompileShader(shader);
-            gl_assert_ok!();
+
 
             // Get the compile status
             let mut status = GLint::from(gl::FALSE);
@@ -789,7 +768,7 @@ impl GL3Backend {
                 );
                 return Err(QuicksilverError::ContextError(String::from_utf8(buf).unwrap()));
             }
-            gl_assert_ok!();
+
         }
         Ok(shader)
     }
@@ -824,7 +803,7 @@ impl GL3Backend {
             );
             return Err(QuicksilverError::ContextError(String::from_utf8(buf).unwrap()));
         }
-        gl_assert_ok!();
+
         Ok(program)
     }
     // unsafe fn default_texture_unit

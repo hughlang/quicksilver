@@ -1,6 +1,6 @@
 use crate::{
     Result,
-    backend::{Backend, BackendImpl, ImageData, instance, set_instance},
+    backend::{Backend, BackendImpl, instance, set_instance},
     geom::{Rectangle, Scalar, Transform, Vector},
     graphics::{Background, BlendMode, Color, Drawable, DrawTask, Mesh, PixelFormat, ResizeStrategy, Texture, View},
     input::{ButtonState, Gamepad, Keyboard, Mouse, MouseCursor},
@@ -30,7 +30,7 @@ use {
 #[cfg(not(target_arch = "wasm32"))]
 use {
     gl,
-    glutin::{self, Api, EventsLoop, ContextTrait, GlProfile, GlRequest, Icon, Robustness}
+    glutin::{self, EventsLoop, ContextTrait, GlProfile, Icon, Robustness}
 };
 
 
@@ -114,14 +114,10 @@ impl Window {
             window = window.with_max_dimensions(v.into());
         };
         let context = glutin::ContextBuilder::new()
-            // .with_gl(GlRequest::Specific(Api::OpenGl, (3, 2)))
             .with_vsync(settings.vsync)
             .with_multisampling(settings.multisampling.unwrap_or(0))
-            // .with_pixel_format(color_bits: u8, alpha_bits: u8)
-            .with_gl_profile(GlProfile::Compatibility)
             .with_gl_robustness(Robustness::TryRobustLoseContextOnReset)
             .with_gl_debug_flag(true)
-            .with_srgb(true)
             ;
         let gl_window = glutin::WindowedContext::new_windowed(window, context, &events)?;
         unsafe {
