@@ -95,11 +95,11 @@ impl Backend for GL3Backend {
     type Platform = WindowedContext;
 
     unsafe fn new(context: WindowedContext, texture_mode: ImageScaleStrategy, multisample: bool) -> Result<GL3Backend> {
-        // if gl::DebugMessageCallback::is_loaded() {
-        //     gl::Enable(gl::DEBUG_OUTPUT);
-        //     gl::DebugMessageCallback(debug_output_gl as GLDEBUGPROC, ptr::null());
-        //     gl::Enable(gl::DEBUG_OUTPUT_SYNCHRONOUS);
-        // }
+        if gl::DebugMessageCallback::is_loaded() {
+            gl::Enable(gl::DEBUG_OUTPUT);
+            gl::DebugMessageCallback(debug_output_gl as GLDEBUGPROC, ptr::null());
+            gl::Enable(gl::DEBUG_OUTPUT_SYNCHRONOUS);
+        }
         let texture_mode = match texture_mode {
             ImageScaleStrategy::Pixelate => gl::NEAREST,
             ImageScaleStrategy::Blur => gl::LINEAR
@@ -537,7 +537,7 @@ impl Backend for GL3Backend {
             gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
 
             let gl_format = format_gl(format);
-            let gl_bytes = byte_size(format);
+            // let gl_bytes = byte_size(format);
 
             gl::BindTexture(gl::TEXTURE_2D, 0);
 
@@ -583,7 +583,7 @@ impl Backend for GL3Backend {
         let id = texture.texture_id;
 
         let gl_format = format_gl(format);
-        let gl_bytes = byte_size(format);
+        // let gl_bytes = byte_size(format);
         // eprintln!("Updating [{}] texture_id={:?} rect={:?} format={:?}", idx, id, rect, gl_format);
 
         unsafe {
@@ -632,7 +632,7 @@ impl Backend for GL3Backend {
             }
             let idx = task.texture_idx as u32;
             let texture = &self.tex_units[task.texture_idx];
-            let texture_id = texture.texture_id;
+            // let texture_id = texture.texture_id;
             gl::ActiveTexture(gl::TEXTURE0 + idx);
             gl::UseProgram(texture.program_id);
             gl::Uniform1i(texture.location_id, idx as i32);

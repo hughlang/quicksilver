@@ -30,7 +30,7 @@ use {
 #[cfg(not(target_arch = "wasm32"))]
 use {
     gl,
-    glutin::{self, EventsLoop, ContextTrait, GlProfile, Icon, Robustness}
+    glutin::{self, EventsLoop, ContextTrait, Icon, Robustness}
 };
 
 
@@ -548,7 +548,7 @@ impl Window {
 
     /// Passthru method to access the backend OpenGL/WebGL method
     pub fn create_texture(&mut self, texture: &Texture) -> Result<usize> {
-        unsafe { self.backend().create_texture_unit(texture) }
+        self.backend().create_texture_unit(texture)
     }
 
     /// Passthru method to access the backend OpenGL/WebGL method.
