@@ -383,9 +383,25 @@ impl Backend for WebGLBackend {
         };
         let format = format_gl(format);
         let [x, y, width, height] = self.viewport();
-        let length = (width * height * bytes_per_pixel) as usize;
+        let length = (width * height * bytes_per_pixel as) as usize;
         let mut buffer: Vec<u8> = Vec::with_capacity(length);
         let pointer = buffer.as_slice();
+        self.gl_ctx.read_pixels(x, y, width, height, format, gl::UNSIGNED_BYTE, Some(pointer));
+        buffer.set_len(length);
+        (Vector::new(width, height), buffer)
+    }
+
+    unsafe fn capture(&self, rect: &Rectangle, format: PixelFormat) -> (Vector, Vec<u8>) {
+        let bytes_per_pixel = match format {
+            PixelFormat::RGBA => 4,
+            PixelFormat::RGB => 3,
+            PixelFormat::Alpha => 1,
+        };
+        let format = format_gl(format);
+        let length = (width * height * bytes_per_pixel as f32) as usize;
+        let mut buffer: Vec<u8> = Vec::with_capacity(length);
+        let pointer = buffer.as_slice();
+        let (x, y, width, height) = (rect.x() as i32, rect.y() as i32, rect.width() as i32, rect.height() as i32);
         self.gl_ctx.read_pixels(x, y, width, height, format, gl::UNSIGNED_BYTE, Some(pointer));
         buffer.set_len(length);
         (Vector::new(width, height), buffer)
@@ -585,7 +601,7 @@ impl Backend for WebGLBackend {
 
             let mut ranges: Vec<(Option<u32>, Range<usize>)> = Vec::new();
             let ranges: Vec<(Option<u32>, Range<usize>)> = {
-                if task.texture_idx == 0 {                                
+                if task.texture_idx == 0 {
                     let mut last_id: Option<u32> = None;
                     let mut range_start: usize = 0;
                     for (i, triangle) in task.triangles.iter().enumerate() {
@@ -614,7 +630,7 @@ impl Backend for WebGLBackend {
                     ranges
                 }
             };
-            
+
             for data in &ranges {
                 let range = data.1.clone();
                 // Upload the texture to the GPU

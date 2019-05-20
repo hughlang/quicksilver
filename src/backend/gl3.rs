@@ -37,12 +37,6 @@ extern "system" fn debug_output_gl(_source: GLenum, _type: GLenum, _id: GLuint, 
 }
 
 pub struct TextureUnit {
-    // /// The vertex array object
-    // pub vao: u32,
-    // /// The vertex buffer 
-    // pub vbo: u32,
-    // /// The element buffer
-    // pub ebo: u32,
     /// The id returned by glCreateProgram in backend.link_program.
     pub program_id: u32,
     /// The id returned when glCreateShader in backend.compile_shader for the vertex shader
@@ -118,7 +112,7 @@ impl Backend for GL3Backend {
         let raw = gl::GetString(gl::VERSION);
         let version = String::from_utf8(CStr::from_ptr(raw as *const _).to_bytes().to_vec()).unwrap();
         println!(">>> OpenGL version={:?}", version);
-        
+
         gl::BindVertexArray(vao);
         let mut buffers = [0, 0];
         gl::GenBuffers(2, (&mut buffers).as_mut_ptr());
@@ -372,7 +366,6 @@ impl Backend for GL3Backend {
     unsafe fn set_viewport(&mut self, area: Rectangle) where Self: Sized {
         let size: LogicalSize = area.size().into();
         let dpi = self.context.get_hidpi_factor();
-        eprintln!("logical size={:?} physical size={:?}", size, size.to_physical(dpi));
         self.context.resize(size.to_physical(dpi));
         let dpi = dpi as f32;
         gl::Viewport(
@@ -394,6 +387,18 @@ impl Backend for GL3Backend {
         let length = (width * height * bytes_per_pixel) as usize;
         let mut buffer = Vec::with_capacity(length);
         let pointer = buffer.as_mut_ptr() as *mut c_void;
+        gl::ReadPixels(x, y, width, height, format, gl::UNSIGNED_BYTE, pointer);
+        buffer.set_len(length);
+        (Vector::new(width, height), buffer)
+    }
+
+    unsafe fn capture(&self, rect: &Rectangle, format: PixelFormat) -> (Vector, Vec<u8>) where Self: Sized {
+        let bytes_per_pixel = byte_size(format);
+        let format = format_gl(format);
+        let length = (rect.width() * rect.height() * bytes_per_pixel as f32) as usize;
+        let mut buffer = Vec::with_capacity(length);
+        let pointer = buffer.as_mut_ptr() as *mut c_void;
+        let (x, y, width, height) = (rect.x() as i32, rect.y() as i32, rect.width() as i32, rect.height() as i32);
         gl::ReadPixels(x, y, width, height, format, gl::UNSIGNED_BYTE, pointer);
         buffer.set_len(length);
         (Vector::new(width, height), buffer)
@@ -581,7 +586,7 @@ impl Backend for GL3Backend {
             let mut tex_height: i32 = 0;
             gl::GetTexLevelParameteriv(gl::TEXTURE_2D, 0, gl::TEXTURE_WIDTH, &mut tex_width);
             gl::GetTexLevelParameteriv(gl::TEXTURE_2D, 0, gl::TEXTURE_HEIGHT, &mut tex_height);
-            
+
             eprintln!(">>> TEX width={:?} height={:?}", tex_width, tex_height);
             eprintln!(">>> Uploaded Texture: idx={} for texture_id={:?} size={}x{}", idx, texture.texture_id, width, height);
             gl::UseProgram(0);

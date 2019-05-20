@@ -38,6 +38,7 @@ pub(crate) trait Backend {
     unsafe fn set_viewport(&mut self, area: Rectangle) where Self: Sized;
 
     unsafe fn screenshot(&self, format: PixelFormat) -> (Vector, Vec<u8>);
+    unsafe fn capture(&self, rect: &Rectangle, format: PixelFormat) -> (Vector, Vec<u8>);
 
     fn set_cursor(&mut self, cursor: MouseCursor);
     fn set_title(&mut self, title: &str);
