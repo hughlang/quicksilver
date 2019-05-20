@@ -604,12 +604,13 @@ impl Backend for GL3Backend {
 
         unsafe {
             // gl::PixelStorei(gl::UNPACK_ALIGNMENT, gl_bytes as i32);
-            if gl::IsTexture(id) == gl::TRUE {
-                eprintln!("{:?} is a texture", id);
-            } else {
-                eprintln!("{:?} is NOT a texture", id);
-                // return Ok(());
-            }
+            // if gl::IsTexture(id) == gl::TRUE {
+            //     eprintln!("update {:?} is a texture", id);
+            // } else {
+            //     eprintln!("update {:?} is NOT a texture", id);
+            //     // return Ok(());
+            // }
+
             gl::UseProgram(texture.program_id);
 
             gl::ActiveTexture(gl::TEXTURE0 + idx as u32);
@@ -655,14 +656,6 @@ impl Backend for GL3Backend {
             gl::ActiveTexture(gl::TEXTURE0 + idx);
             gl::UseProgram(texture.program_id);
             gl::Uniform1i(texture.location_id, idx as i32);
-
-            if gl::IsTexture(texture.texture_id) == gl::TRUE {
-                // eprintln!("{:?} is a texture", texture.texture_id);
-            } else {
-                eprintln!("{:?} is NOT a texture", texture.texture_id);
-                // return Ok(());
-            }
-
 
             let mut vertices: Vec<f32> = Vec::new();
             let mut cb = &texture.serializer;
@@ -738,7 +731,12 @@ impl Backend for GL3Backend {
                     }
                 };
 
-                gl::BindTexture(gl::TEXTURE_2D, texture_id);
+                if gl::IsTexture(texture_id) == gl::TRUE {
+                    gl::BindTexture(gl::TEXTURE_2D, texture_id);
+                } else {
+                    // eprintln!("draw_tasks {:?} is NOT a texture", texture_id);
+                }
+
                 // gl::Uniform1i(texture.location_id, idx as i32);
                 gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, self.texture_mode as i32);
                 gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, self.texture_mode as i32);
