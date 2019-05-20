@@ -388,6 +388,7 @@ impl Window {
     ///
     /// This will flush all of the drawn items to the screen
     pub fn reset_blend_mode(&mut self) -> Result<()> {
+        println!("### reset_blend_mode");
         self.flush()?;
         unsafe {
             self.backend().reset_blend_mode();

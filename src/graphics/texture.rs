@@ -96,8 +96,6 @@ impl Texture {
     pub fn upload(&self, idx: usize, data: &[u8], width: u32, height: u32, format: PixelFormat) -> Result<()> {
         unsafe {
             let img = instance().upload_texture(idx, data, width, height, format)?;
-            eprintln!(">>> Texture.upload(): idx={} for texture_id={:?} size={}x{}", idx, img.id, width, height);
-
         }
         Ok(())
     }

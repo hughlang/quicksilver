@@ -37,6 +37,12 @@ extern "system" fn debug_output_gl(_source: GLenum, _type: GLenum, _id: GLuint, 
 }
 
 pub struct TextureUnit {
+    // /// The vertex array object
+    // pub vao: u32,
+    // /// The vertex buffer 
+    // pub vbo: u32,
+    // /// The element buffer
+    // pub ebo: u32,
     /// The id returned by glCreateProgram in backend.link_program.
     pub program_id: u32,
     /// The id returned when glCreateShader in backend.compile_shader for the vertex shader
@@ -109,8 +115,11 @@ impl Backend for GL3Backend {
             gl::GenVertexArrays(1, &mut array as *mut u32);
             array
         };
+        let raw = gl::GetString(gl::VERSION);
+        let version = String::from_utf8(CStr::from_ptr(raw as *const _).to_bytes().to_vec()).unwrap();
+        println!(">>> OpenGL version={:?}", version);
+        
         gl::BindVertexArray(vao);
-        println!(">>> BindVertexArray");
         let mut buffers = [0, 0];
         gl::GenBuffers(2, (&mut buffers).as_mut_ptr());
         let [vbo, ebo] = buffers;
@@ -123,7 +132,6 @@ impl Backend for GL3Backend {
             gl::ONE_MINUS_SRC_ALPHA,
         );
         gl::Enable(gl::BLEND);
-        println!(">>> gl::Enable(gl::BLEND)");
         // gl::Enable(gl::FRAMEBUFFER_SRGB);
         // gl::ClearColor(0.02, 0.02, 0.02, 1.0);
 
@@ -135,7 +143,7 @@ impl Backend for GL3Backend {
         let fragment: u32 = 0;
         let vertex:u32 = 0;
 
-        eprintln!("### GL3Backend.new – Using program={:?} raw y={:?}", shader, 0);
+        eprintln!("### GL3Backend.new – Using program={:?} vao={} vbo={} ebo={}", shader, vao, vbo, ebo);
         let mut backend = GL3Backend {
             context,
             texture: NULL_TEXTURE_ID,
@@ -436,6 +444,8 @@ impl Backend for GL3Backend {
 
         unsafe {
             // gl::BindTexture(gl::TEXTURE_2D, 0);
+            gl::BindBuffer(gl::ARRAY_BUFFER, self.vbo);
+            gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, self.ebo);
 
             let vertex_id = self.compile_shader(vertex_shader, gl::VERTEX_SHADER).unwrap();
             let fragment_id = self.compile_shader(fragment_shader, gl::FRAGMENT_SHADER).unwrap();
@@ -444,6 +454,7 @@ impl Backend for GL3Backend {
 
             let idx = self.tex_units.len();
             eprintln!("==Prepare=========================================================");
+            eprintln!(">>> Globals vao={} vbo={} ebo={}", self.vao, self.vbo, self.ebo);
             eprintln!(">>> Created program_id={} vertex_id={} fragment_id={} texture_id={}", program_id, vertex_id, fragment_id, texture_id);
 
             // Create a no-op serializer function
@@ -473,14 +484,14 @@ impl Backend for GL3Backend {
             return Err(QuicksilverError::ContextError(message));
         }
         let texture = &mut self.tex_units[idx];
-        let texture_id = texture.texture_id;
+        // let texture_id = texture.texture_id;
         let program_id = texture.program_id;
         self.tex_units[idx].serializer = Box::new(cb);
 
         let float_size = size_of::<f32>() as u32;
         let vert_size = fields.iter().fold(0, |acc, x| acc + x.1);
         let stride_distance = (vert_size * float_size) as i32;
-        eprintln!("Configuring texture idx={}, texture_id={} vert_size={} float_size={}", idx, texture_id, vert_size, float_size);
+        eprintln!("Configuring texture idx={}, program_id={} vert_size={} float_size={}", idx, program_id, vert_size, float_size);
 
         unsafe {
 
@@ -520,18 +531,20 @@ impl Backend for GL3Backend {
 
                 offset += count * float_size;
             }
+            gl::UseProgram(0);
 
             Ok(())
         }
     }
 
     // TODO: Consolidate with create_texture method
-    fn upload_texture(&mut self, idx: usize, data: &[u8], width: u32, height: u32, format: PixelFormat) -> Result<(ImageData)> {
+    fn upload_texture(&mut self, idx: usize, data: &[u8], width: u32, height: u32, format: PixelFormat) -> Result<()> {
         unsafe {
             if idx >= self.tex_units.len() {
                 let message = format!("Texture index {} out of bounds for len={}", idx, self.tex_units.len());
                 return Err(QuicksilverError::ContextError(message));
             }
+
             let texture = &mut self.tex_units[idx];
             gl::Enable(gl::BLEND);
             gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
@@ -548,14 +561,15 @@ impl Backend for GL3Backend {
             // https://www.khronos.org/opengl/wiki/GLSL_Sampler#Binding_textures_to_samplers
             gl::ActiveTexture(gl::TEXTURE0 + idx as u32);
             gl::GenTextures(1, &mut texture_id);
-            gl::BindTexture(gl::TEXTURE_2D, texture.texture_id);
+            gl::BindTexture(gl::TEXTURE_2D, texture_id);
             gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::CLAMP_TO_EDGE as i32);
             gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::CLAMP_TO_EDGE as i32);
             gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::NEAREST as i32);
             gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::NEAREST as i32);
-            gl::Enable(gl::TEXTURE_2D);
+            // gl::Enable(gl::TEXTURE_2D);
+
             // Save the new id for later use
-            // texture.texture_id = texture_id;
+            texture.texture_id = texture_id;
             let data = if data.len() == 0 { nullptr() } else { data.as_ptr() as *const c_void };
             gl::TexImage2D(gl::TEXTURE_2D, 0, gl_format as i32, width as i32,
                             height as i32, 0, gl_format, gl::UNSIGNED_BYTE, data);
@@ -567,10 +581,12 @@ impl Backend for GL3Backend {
             let mut tex_height: i32 = 0;
             gl::GetTexLevelParameteriv(gl::TEXTURE_2D, 0, gl::TEXTURE_WIDTH, &mut tex_width);
             gl::GetTexLevelParameteriv(gl::TEXTURE_2D, 0, gl::TEXTURE_HEIGHT, &mut tex_height);
-
+            
             eprintln!(">>> TEX width={:?} height={:?}", tex_width, tex_height);
             eprintln!(">>> Uploaded Texture: idx={} for texture_id={:?} size={}x{}", idx, texture.texture_id, width, height);
-            Ok(ImageData { id: texture.texture_id, width, height })
+            gl::UseProgram(0);
+
+            Ok(())
         }
     }
 
@@ -588,12 +604,13 @@ impl Backend for GL3Backend {
 
         unsafe {
             // gl::PixelStorei(gl::UNPACK_ALIGNMENT, gl_bytes as i32);
-            // if gl::IsTexture(id) == gl::TRUE {
-            //     eprintln!("{:?} is a texture", id);
-            // } else {
-            //     eprintln!("{:?} is NOT a texture", id);
-            //     // return Ok(());
-            // }
+            if gl::IsTexture(id) == gl::TRUE {
+                eprintln!("{:?} is a texture", id);
+            } else {
+                eprintln!("{:?} is NOT a texture", id);
+                // return Ok(());
+            }
+            gl::UseProgram(texture.program_id);
 
             gl::ActiveTexture(gl::TEXTURE0 + idx as u32);
             // https://www.khronos.org/opengl/wiki/GLAPI/glTexSubImage2D
@@ -617,6 +634,8 @@ impl Backend for GL3Backend {
                 gl::UNSIGNED_BYTE,
                 data.as_ptr() as _,
             );
+            // gl::UseProgram(0);
+
             Ok(())
         }
     }
@@ -637,12 +656,12 @@ impl Backend for GL3Backend {
             gl::UseProgram(texture.program_id);
             gl::Uniform1i(texture.location_id, idx as i32);
 
-            // if gl::IsTexture(texture.texture_id) == gl::TRUE {
-            //     eprintln!("{:?} is a texture", texture_id);
-            // } else {
-            //     eprintln!("{:?} is NOT a texture", texture_id);
-            //     // return Ok(());
-            // }
+            if gl::IsTexture(texture.texture_id) == gl::TRUE {
+                // eprintln!("{:?} is a texture", texture.texture_id);
+            } else {
+                eprintln!("{:?} is NOT a texture", texture.texture_id);
+                // return Ok(());
+            }
 
 
             let mut vertices: Vec<f32> = Vec::new();
@@ -656,7 +675,7 @@ impl Backend for GL3Backend {
                 eprintln!(">>> vertex_length new={:?} was={:?}", vertex_length, self.vertex_length);
                 self.vertex_length = vertex_length * 2;
                 // Create the vertex array
-                gl::BufferData(gl::ARRAY_BUFFER, self.vertex_length as isize, nullptr(), gl::STREAM_DRAW);
+                gl::BufferData(gl::ARRAY_BUFFER, self.vertex_length as isize, nullptr(), gl::STATIC_DRAW);
             }
             let vertex_data = vertices.as_ptr() as *const c_void;
             gl::BufferSubData(gl::ARRAY_BUFFER, 0, vertex_length as isize, vertex_data);
@@ -707,7 +726,7 @@ impl Backend for GL3Backend {
                 if index_length > self.index_length {
                     eprintln!("1>>> index_length new={:?} was={:?}", index_length, self.index_length);
                     self.index_length = index_length * 2;
-                    gl::BufferData(gl::ELEMENT_ARRAY_BUFFER, self.index_length as isize, nullptr(), gl::STREAM_DRAW);
+                    gl::BufferData(gl::ELEMENT_ARRAY_BUFFER, self.index_length as isize, nullptr(), gl::STATIC_DRAW);
                 }
                 gl::BufferSubData(gl::ELEMENT_ARRAY_BUFFER, 0, index_length as isize, index_data);
 
@@ -718,9 +737,6 @@ impl Backend for GL3Backend {
                         texture.texture_id
                     }
                 };
-                // if idx > 0 {
-                //     eprintln!("{} texture_id={:?} program_id={:?}", idx, texture_id, texture.program_id);
-                // }
 
                 gl::BindTexture(gl::TEXTURE_2D, texture_id);
                 // gl::Uniform1i(texture.location_id, idx as i32);

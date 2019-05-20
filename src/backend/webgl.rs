@@ -126,6 +126,7 @@ impl Backend for WebGLBackend {
             Ok(ctx) => ctx,
             _ => return Err(QuicksilverError::ContextError("Could not create WebGL2 context".to_owned()))
         };
+        debug_log("starting WebGL");
         let texture_mode = match texture_mode {
             ImageScaleStrategy::Pixelate => gl::NEAREST,
             ImageScaleStrategy::Blur => gl::LINEAR
@@ -507,7 +508,7 @@ impl Backend for WebGLBackend {
         }
     }
 
-    fn upload_texture(&mut self, idx: usize, data: &[u8], width: u32, height: u32, format: PixelFormat) -> Result<(ImageData)> {
+    fn upload_texture(&mut self, idx: usize, data: &[u8], width: u32, height: u32, format: PixelFormat) -> Result<> {
         unsafe {
             if idx >= self.tex_units.len() {
                 let message = format!("Texture index {} out of bounds for len={}", idx, self.tex_units.len());
@@ -525,7 +526,7 @@ impl Backend for WebGLBackend {
             self.gl_ctx.tex_image2_d(gl::TEXTURE_2D, 0, gl_format as i32, width as i32, height as i32, 0, gl_format, gl::UNSIGNED_BYTE, Some(data));
             // self.gl_ctx.generate_mipmap(gl::TEXTURE_2D);
             self.check_ok(line!());
-            Ok(ImageData { id: idx as u32, width, height })
+            Ok(())
         }
     }
 
