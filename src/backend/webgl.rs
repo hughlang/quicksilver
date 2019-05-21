@@ -293,7 +293,7 @@ impl Backend for WebGLBackend {
     unsafe fn create_texture(&mut self, data: &[u8], width: u32, height: u32, format: PixelFormat) -> Result<ImageData> {
         let format = format_gl(format);
         let tex = try_opt(self.gl_ctx.create_texture(), "Create GL texture")?;
-        let id = unwrap_webgl(&tex);
+        let id = unwrap_webgl::<WebGLTexture>(&tex);
         // let raw = texture.as_ref();
         // let id = raw.as_raw() as u32;
         let out = format!("### Created texture id={} width={:?} height={:?}", id, width, height);
@@ -590,7 +590,8 @@ impl Backend for WebGLBackend {
                 continue;
             }
             let idx = task.texture_idx;
-            let texture = &self.tex_units[idx];
+            let texture = &mut self.tex_units[idx];
+
             // let program_id = &texture.program_id;
             self.gl_ctx.use_program(Some(&texture.program_id));
 
@@ -604,14 +605,14 @@ impl Backend for WebGLBackend {
                 self.gl_ctx.active_texture(gl::TEXTURE0);
             }
 
-            let message = format!(">> Get texture uniform {:?}", texture.program_id);
-            let location = try_opt(self.gl_ctx.get_uniform_location(&texture.program_id, "tex"), &message);
+            // let message = format!(">> Get texture uniform {:?}", texture.program_id);
+            // let location = try_opt(self.gl_ctx.get_uniform_location(&texture.program_id, "tex"), &message);
 
-            if location.is_ok() {
-                self.gl_ctx.uniform1i(Some(&location.unwrap()), idx as i32);
-            } else {
-                self.gl_ctx.uniform1i(None, 0);
-            }
+            // if location.is_ok() {
+            //     self.gl_ctx.uniform1i(Some(&location.unwrap()), idx as i32);
+            // } else {
+            //     self.gl_ctx.uniform1i(None, 0);
+            // }
 
             let mut vertices: Vec<f32> = Vec::new();
             let mut cb = &texture.serializer;
@@ -663,7 +664,7 @@ impl Backend for WebGLBackend {
                     let range: Range<usize> = 0..task.triangles.len();
                     // let out = format!(">>> idx={:?} range={:?}", idx, range);
                     // debug_log(&out);
-                    let id = unwrap_webgl(&texture.texture_id);
+                    let id = unwrap_webgl::<WebGLTexture>(&texture.texture_id);
                     ranges.push((Some(id), range));
                     ranges
                 }
@@ -694,15 +695,30 @@ impl Backend for WebGLBackend {
 
                 let bind_tex = {
                     if let Some(img_id) = data.0 {
-                        wrap_webgl(img_id)
+                        wrap_webgl::<WebGLTexture>(img_id)
                     } else {
                         texture.texture_id.clone()
                     }
                 };
 
+                if idx > 0 {
+                    let location_id = texture.location_id.clone().unwrap();
+                    self.gl_ctx.uniform1i(Some(&location_id), idx as i32);
+                } else {
+                    let tex_id: u32 = unwrap_webgl::<WebGLTexture>(&bind_tex);
+                    if tex_id > 0 {
+
+                        let location_id = wrap_webgl::<WebGLUniformLocation>(tex_id + 1);
+                        let out = format!("Synthesize location={:?} tex={:?} from bind_tex={:?}", location_id, tex_id, bind_tex);
+                        debug_log(&out);
+
+                        self.gl_ctx.uniform1i(Some(&location_id), idx as i32);
+                    }
+                }
+
                 if self.gl_ctx.is_texture(Some(&bind_tex)) {
-                    let out = format!("idx={} location={:?} tex={:?}", idx, texture.location_id, bind_tex);
-                    debug_log(&out);
+                    // let out = format!("idx={} location={:?} tex={:?}", idx, texture.location_id, bind_tex);
+                    // debug_log(&out);
                     self.gl_ctx.bind_texture(gl::TEXTURE_2D, Some(&bind_tex));
                     self.gl_ctx.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, self.texture_mode as i32);
                     self.gl_ctx.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, self.texture_mode as i32);
