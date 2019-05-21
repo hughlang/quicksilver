@@ -156,7 +156,7 @@ impl Backend for WebGLBackend {
 
         let texture_idx = backend.create_texture_unit(&texture)?;
         let unit = &backend.tex_units[texture_idx];
-        let out = format!("Created default texture_unit idx={:?} texture_id={:?} program_id={:?}", texture_idx, unit.texture_id, unit.program_id);
+        let out = format!("### Created default texture_unit idx={:?} texture_id={:?} program_id={:?}", texture_idx, unit.texture_id, unit.program_id);
         debug_log(&out);
 
         Ok(backend)
@@ -292,15 +292,18 @@ impl Backend for WebGLBackend {
 
     unsafe fn create_texture(&mut self, data: &[u8], width: u32, height: u32, format: PixelFormat) -> Result<ImageData> {
         let format = format_gl(format);
+        self.gl_ctx.bind_texture(gl::TEXTURE_2D, None);
+
         let tex = try_opt(self.gl_ctx.create_texture(), "Create GL texture")?;
+        
         let id = unwrap_webgl::<WebGLTexture>(&tex);
         // let raw = texture.as_ref();
         // let id = raw.as_raw() as u32;
-        let out = format!("### Created texture id={} width={:?} height={:?}", id, width, height);
+        let out = format!("### Created texture id={:?} width={:?} height={:?}", id, width, height);
         debug_log(&out);
 
         let texture = &mut self.tex_units[0];
-        self.gl_ctx.use_program(Some(&texture.program_id));
+        // self.gl_ctx.use_program(Some(&texture.program_id));
 
 
         self.gl_ctx.bind_texture(gl::TEXTURE_2D, Some(&tex));
@@ -309,12 +312,14 @@ impl Backend for WebGLBackend {
         self.gl_ctx.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::NEAREST as i32);
         self.gl_ctx.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::NEAREST as i32);
         self.gl_ctx.tex_image2_d(gl::TEXTURE_2D, 0, format as i32, width as i32, height as i32, 0, format, gl::UNSIGNED_BYTE, Some(data));
-        // self.gl_ctx.generate_mipmap(gl::TEXTURE_2D);
+        self.gl_ctx.generate_mipmap(gl::TEXTURE_2D);
 
-        let message = format!(">> Get texture uniform {:?}", texture.program_id);
-        let location = try_opt(self.gl_ctx.get_uniform_location(&texture.program_id, "tex"), &message);
-        let out = format!("### Created texture id={:?} location={:?} width={:?} height={:?}", id, location, width, height);
-        debug_log(&out);
+        self.textures.push(Some(tex));
+
+        // let message = format!(">> Get texture uniform {:?}", texture.program_id);
+        // let location = try_opt(self.gl_ctx.get_uniform_location(&texture.program_id, "tex"), &message);
+        // let out = format!("### Created texture id={:?} location={:?} width={:?} height={:?}", id, location, width, height);
+        // debug_log(&out);
 
         Ok(ImageData { id, width, height })
     }
@@ -598,7 +603,7 @@ impl Backend for WebGLBackend {
             // let out = format!("draw_tasks // idx={}: texture={:?} location={:?}", idx, texture.texture_id, texture.location_id);
             // debug_log(&out);
 
-            // self.gl_ctx.uniform1i(texture.location_id.as_ref(), idx as i32);
+            self.gl_ctx.uniform1i(texture.location_id.as_ref(), idx as i32);
             if idx > 0 {
                 self.gl_ctx.active_texture(gl::TEXTURE0 + idx as u32);
             } else {
@@ -701,32 +706,33 @@ impl Backend for WebGLBackend {
                     }
                 };
 
-                if idx > 0 {
-                    let location_id = texture.location_id.clone().unwrap();
-                    self.gl_ctx.uniform1i(Some(&location_id), idx as i32);
-                } else {
-                    let tex_id: u32 = unwrap_webgl::<WebGLTexture>(&bind_tex);
-                    if tex_id > 0 {
+                // if idx > 0 {
+                //     let location_id = texture.location_id.clone().unwrap();
+                //     self.gl_ctx.uniform1i(Some(&location_id), idx as i32);
+                // } else {
+                //     let tex_id: u32 = unwrap_webgl::<WebGLTexture>(&bind_tex);
+                //     if tex_id > 0 {
 
-                        let location_id = wrap_webgl::<WebGLUniformLocation>(tex_id + 1);
-                        let out = format!("Synthesize location={:?} tex={:?} from bind_tex={:?}", location_id, tex_id, bind_tex);
-                        debug_log(&out);
+                //         let location_id = wrap_webgl::<WebGLUniformLocation>(tex_id + 1);
+                //         let out = format!("Synthesize location={:?} tex={:?} from bind_tex={:?}", location_id, tex_id, bind_tex);
+                //         debug_log(&out);
 
-                        self.gl_ctx.uniform1i(Some(&location_id), idx as i32);
-                    }
-                }
+                //         self.gl_ctx.uniform1i(Some(&location_id), idx as i32);
+                //     }
+                // }
+                let tex_id: u32 = unwrap_webgl::<WebGLTexture>(&bind_tex);
 
-                if self.gl_ctx.is_texture(Some(&bind_tex)) {
-                    // let out = format!("idx={} location={:?} tex={:?}", idx, texture.location_id, bind_tex);
-                    // debug_log(&out);
+                if tex_id > 0 && self.gl_ctx.is_texture(Some(&bind_tex)) {
+                    let out = format!("idx={} location={:?} tex={:?}", idx, texture.location_id, bind_tex);
+                    debug_log(&out);
                     self.gl_ctx.bind_texture(gl::TEXTURE_2D, Some(&bind_tex));
-                    self.gl_ctx.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, self.texture_mode as i32);
-                    self.gl_ctx.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, self.texture_mode as i32);
                 } else {
                     let out = format!("BAD: idx={} location={:?} tex={:?}", idx, texture.location_id, bind_tex);
                     debug_log(&out);
 
                 }
+                self.gl_ctx.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, self.texture_mode as i32);
+                self.gl_ctx.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, self.texture_mode as i32);
 
                 // Draw the triangles
                 self.gl_ctx.draw_elements(gl::TRIANGLES, indices.len() as i32, gl::UNSIGNED_INT, 0);
