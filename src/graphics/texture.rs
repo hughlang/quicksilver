@@ -95,7 +95,7 @@ impl Texture {
     /// to upload data (sometimes empty) with specified width and height to the GPU.
     pub fn upload(&self, idx: usize, data: &[u8], width: u32, height: u32, format: PixelFormat) -> Result<()> {
         unsafe {
-            let img = instance().upload_texture(idx, data, width, height, format)?;
+            let _ = instance().upload_texture(idx, data, width, height, format)?;
         }
         Ok(())
     }
