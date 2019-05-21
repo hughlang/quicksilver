@@ -297,14 +297,10 @@ impl Backend for WebGLBackend {
         let tex = try_opt(self.gl_ctx.create_texture(), "Create GL texture")?;
         
         let id = unwrap_webgl::<WebGLTexture>(&tex);
-        // let raw = texture.as_ref();
-        // let id = raw.as_raw() as u32;
         let out = format!("### Created texture id={:?} width={:?} height={:?}", id, width, height);
         debug_log(&out);
 
         let texture = &mut self.tex_units[0];
-        // self.gl_ctx.use_program(Some(&texture.program_id));
-
 
         self.gl_ctx.bind_texture(gl::TEXTURE_2D, Some(&tex));
         self.gl_ctx.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::CLAMP_TO_EDGE as i32);
@@ -315,11 +311,6 @@ impl Backend for WebGLBackend {
         self.gl_ctx.generate_mipmap(gl::TEXTURE_2D);
 
         self.textures.push(Some(tex));
-
-        // let message = format!(">> Get texture uniform {:?}", texture.program_id);
-        // let location = try_opt(self.gl_ctx.get_uniform_location(&texture.program_id, "tex"), &message);
-        // let out = format!("### Created texture id={:?} location={:?} width={:?} height={:?}", id, location, width, height);
-        // debug_log(&out);
 
         Ok(ImageData { id, width, height })
     }
@@ -706,29 +697,15 @@ impl Backend for WebGLBackend {
                     }
                 };
 
-                // if idx > 0 {
-                //     let location_id = texture.location_id.clone().unwrap();
-                //     self.gl_ctx.uniform1i(Some(&location_id), idx as i32);
-                // } else {
-                //     let tex_id: u32 = unwrap_webgl::<WebGLTexture>(&bind_tex);
-                //     if tex_id > 0 {
-
-                //         let location_id = wrap_webgl::<WebGLUniformLocation>(tex_id + 1);
-                //         let out = format!("Synthesize location={:?} tex={:?} from bind_tex={:?}", location_id, tex_id, bind_tex);
-                //         debug_log(&out);
-
-                //         self.gl_ctx.uniform1i(Some(&location_id), idx as i32);
-                //     }
-                // }
                 let tex_id: u32 = unwrap_webgl::<WebGLTexture>(&bind_tex);
 
                 if tex_id > 0 && self.gl_ctx.is_texture(Some(&bind_tex)) {
-                    let out = format!("idx={} location={:?} tex={:?}", idx, texture.location_id, bind_tex);
-                    debug_log(&out);
+                    // let out = format!("idx={} location={:?} tex={:?}", idx, texture.location_id, bind_tex);
+                    // debug_log(&out);
                     self.gl_ctx.bind_texture(gl::TEXTURE_2D, Some(&bind_tex));
                 } else {
-                    let out = format!("BAD: idx={} location={:?} tex={:?}", idx, texture.location_id, bind_tex);
-                    debug_log(&out);
+                    // let out = format!("BAD: idx={} location={:?} tex={:?}", idx, texture.location_id, bind_tex);
+                    // debug_log(&out);
 
                 }
                 self.gl_ctx.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, self.texture_mode as i32);
@@ -740,6 +717,27 @@ impl Backend for WebGLBackend {
         }
         Ok(())
     }
+
+    fn reset_gpu(&mut self) {
+        unsafe {
+            for texture_id in &self.textures {
+                if let Some(texture_id) = texture_id {
+                    self.gl_ctx.delete_texture(Some(texture_id));
+                }
+            }
+            for (i, texture) in self.tex_units.iter().enumerate() {
+                if i > 0 {
+
+                    self.gl_ctx.delete_texture(Some(&texture.texture_id));
+                    self.gl_ctx.delete_program(Some(&texture.program_id));
+                    self.gl_ctx.delete_shader(Some(&texture.fragment_id));
+                    self.gl_ctx.delete_shader(Some(&texture.vertex_id));
+                }
+            }
+        }
+    }
+
+    
 }
 
 impl WebGLBackend {
@@ -761,30 +759,6 @@ impl WebGLBackend {
         return Ok(program);
     }
 
-    // fn unwrap_webgl(&self, tex: &WebGLTexture) -> u32 {
-    //     let raw = tex.as_ref();
-    //     raw.as_raw() as u32
-    // }
-
-    // fn wrap_webgl(&self, id: u32) -> WebGLTexture {
-    //     unsafe {
-    //         let a_ref = Reference::from_raw_unchecked(id as i32);
-    //         WebGLTexture::from_reference_unchecked(a_ref)
-    //     }
-    // }
-
-    // fn unwrap_location(&self, tex: &WebGLUniformLocation) -> u32 {
-    //     let raw = tex.as_ref();
-    //     raw.as_raw() as u32
-    // }
-
-    // fn wrap_location(&self, id: u32) -> WebGLUniformLocation {
-    //     unsafe {
-    //         let a_ref = Reference::from_raw_unchecked(id as i32);
-    //         WebGLUniformLocation::from_reference_unchecked(a_ref)
-    //     }
-    // }
-
     fn check_ok(&self, line: u32) {
         let err = self.gl_ctx.get_error();
         if err != gl::NO_ERROR {
@@ -795,6 +769,14 @@ impl WebGLBackend {
         }
     }
 
+}
+
+impl Drop for WebGLBackend {
+    fn drop(&mut self) {
+        self.reset_gpu();
+        self.gl_ctx.delete_buffer(Some(&self.vbo));
+        self.gl_ctx.delete_buffer(Some(&self.ebo));
+    }
 }
 
 pub fn wrap_webgl<T>(id: u32) -> T where T: ReferenceType {
@@ -809,35 +791,6 @@ pub fn unwrap_webgl<T>(tex: &T) -> u32 where T: AsRef<Reference> {
     raw.as_raw() as u32
 }
 
-// impl<T> WebGLBackend {
-//     fn wrap_webgl(&self, id: u32) -> T where T: ReferenceType {
-//         unsafe {
-//             let a_ref = Reference::from_raw_unchecked(id as i32);
-//             T::from_reference_unchecked(a_ref)
-//         }
-//     }
-
-//     fn unwrap_webgl(&self, tex: &T) -> u32 where T: AsRef<Reference> {
-//         let raw = tex.as_ref();
-//         raw.as_raw() as u32
-//     }
-// }
-
-impl Drop for WebGLBackend {
-    fn drop(&mut self) {
-        for texture in &self.tex_units {
-            self.gl_ctx.delete_texture(Some(&texture.texture_id));
-            self.gl_ctx.delete_program(Some(&texture.program_id));
-            self.gl_ctx.delete_shader(Some(&texture.fragment_id));
-            self.gl_ctx.delete_shader(Some(&texture.vertex_id));
-        }
-        // self.gl_ctx.delete_program(Some(&self.shader));
-        // self.gl_ctx.delete_shader(Some(&self.fragment));
-        // self.gl_ctx.delete_shader(Some(&self.vertex));
-        self.gl_ctx.delete_buffer(Some(&self.vbo));
-        self.gl_ctx.delete_buffer(Some(&self.ebo));
-    }
-}
 
 const DEFAULT_VERTEX_SHADER: &str = r#"
 attribute vec2 position;

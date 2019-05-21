@@ -739,6 +739,19 @@ impl Backend for GL3Backend {
         }
         Ok(())
     }
+
+    fn reset_gpu(&mut self) {
+        unsafe {
+            for (i, texture) in self.tex_units.iter().enumerate() {
+                if i > 0 {                    
+                    gl::DeleteTextures(1, texture.texture_id as *const u32);
+                    gl::DeleteProgram(texture.program_id);
+                    gl::DeleteShader(texture.fragment_id);
+                    gl::DeleteShader(texture.vertex_id);
+                }
+            }
+        }
+    }
 }
 
 impl GL3Backend {
@@ -819,12 +832,7 @@ impl GL3Backend {
 impl Drop for GL3Backend {
     fn drop(&mut self) {
         unsafe {
-            for texture in &self.tex_units {
-                gl::DeleteTextures(1, texture.texture_id as *const u32);
-                gl::DeleteProgram(texture.program_id);
-                gl::DeleteShader(texture.fragment_id);
-                gl::DeleteShader(texture.vertex_id);
-            }
+            self.reset_gpu();
             gl::DeleteProgram(self.shader);
             gl::DeleteShader(self.fragment);
             gl::DeleteShader(self.vertex);

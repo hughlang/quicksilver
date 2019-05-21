@@ -28,6 +28,8 @@ pub(crate) trait Backend {
     where CB: Fn(Vertex) -> Vec<f32> + 'static;
 
     unsafe fn draw_tasks(&mut self, tasks: &Vec<DrawTask>) -> Result<()>;
+    fn reset_gpu(&mut self);
+
 
     unsafe fn create_surface(&mut self, image: &Image) -> Result<SurfaceData>;
     unsafe fn bind_surface(&mut self, surface: &Surface);

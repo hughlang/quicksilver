@@ -564,4 +564,9 @@ impl Window {
     pub fn add_task(&mut self, task: DrawTask) {
         self.draw_tasks.push(task);
     }
+
+    /// Method that should be called when leaving a view, which will no longer be needed. 
+    pub fn reset_gpu(&mut self) {
+        self.backend().reset_gpu();
+    }
 }
