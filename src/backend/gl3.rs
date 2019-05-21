@@ -608,13 +608,6 @@ impl Backend for GL3Backend {
         // eprintln!("Updating [{}] texture_id={:?} rect={:?} format={:?}", idx, id, rect, gl_format);
 
         unsafe {
-            // gl::PixelStorei(gl::UNPACK_ALIGNMENT, gl_bytes as i32);
-            // if gl::IsTexture(id) == gl::TRUE {
-            //     eprintln!("update {:?} is a texture", id);
-            // } else {
-            //     eprintln!("update {:?} is NOT a texture", id);
-            //     // return Ok(());
-            // }
 
             gl::UseProgram(texture.program_id);
 
@@ -622,12 +615,6 @@ impl Backend for GL3Backend {
             // https://www.khronos.org/opengl/wiki/GLAPI/glTexSubImage2D
             gl::BindTexture(gl::TEXTURE_2D, id);
             // gl::Uniform1i(texture.location_aid, idx as i32);
-
-            let mut width: i32 = -1;
-            let mut height: i32 = -1;
-            gl::GetTexLevelParameteriv(gl::TEXTURE_2D, 0, gl::TEXTURE_WIDTH, &mut width);
-            gl::GetTexLevelParameteriv(gl::TEXTURE_2D, 0, gl::TEXTURE_HEIGHT, &mut height);
-            // eprintln!("TEX id={:?} width={:?} height={:?}", id, width, height);
 
             gl::TexSubImage2D(
                 gl::TEXTURE_2D,

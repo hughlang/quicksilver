@@ -182,7 +182,6 @@ impl Backend for WebGLBackend {
         let texture_idx = backend.create_texture_unit(&texture)?;
         let unit = &backend.tex_units[texture_idx];
         let out = format!("Created default texture_unit idx={:?} texture_id={:?} program_id={:?}", texture_idx, unit.texture_id, unit.program_id);
-        // gl_assert_ok!();
         debug_log(&out);
 
         Ok(backend)
@@ -383,7 +382,7 @@ impl Backend for WebGLBackend {
         };
         let format = format_gl(format);
         let [x, y, width, height] = self.viewport();
-        let length = (width * height * bytes_per_pixel as) as usize;
+        let length = (width * height * bytes_per_pixel) as usize;
         let mut buffer: Vec<u8> = Vec::with_capacity(length);
         let pointer = buffer.as_slice();
         self.gl_ctx.read_pixels(x, y, width, height, format, gl::UNSIGNED_BYTE, Some(pointer));
@@ -398,7 +397,7 @@ impl Backend for WebGLBackend {
             PixelFormat::Alpha => 1,
         };
         let format = format_gl(format);
-        let length = (width * height * bytes_per_pixel as f32) as usize;
+        let length = (rect.width() * rect.height() * bytes_per_pixel as f32) as usize;
         let mut buffer: Vec<u8> = Vec::with_capacity(length);
         let pointer = buffer.as_slice();
         let (x, y, width, height) = (rect.x() as i32, rect.y() as i32, rect.width() as i32, rect.height() as i32);
@@ -441,7 +440,7 @@ impl Backend for WebGLBackend {
         let result = self.prepare_texture(&texture.vertex_shader, &texture.fragment_shader);
         if result.is_ok() {
             let texture_idx = result.unwrap();
-            self.configure_texture(texture_idx, &texture.fields, serialize_vertex, OUT_COLOR, SAMPLER)?;
+            self.configure_texture(texture_idx, &texture.fields, serialize_vertex, &texture.out_color, &texture.sampler)?;
             self.check_ok(line!());
             return Ok(texture_idx);
         } else {
@@ -456,7 +455,9 @@ impl Backend for WebGLBackend {
             let vertex_id = self.compile_shader(vertex_shader, gl::VERTEX_SHADER)?;
             let fragment_id = self.compile_shader(fragment_shader, gl::FRAGMENT_SHADER)?;
             let program_id = self.link_program(&vertex_id, &fragment_id)?;
-            let texture_id = try_opt(self.gl_ctx.create_texture(), ">>> Create texture")?;
+
+            let a_ref = Reference::from_raw_unchecked(0);
+            let texture_id = WebGLTexture::from_reference_unchecked(a_ref);
 
             // Create a no-op serializer function
             let serializer = |_vertex| -> Vec<f32> {
@@ -493,7 +494,7 @@ impl Backend for WebGLBackend {
         let stride_distance = (vert_size * float_size) as i32;
 
         unsafe {
-            self.gl_ctx.use_program(Some(&program_id));
+            // self.gl_ctx.use_program(Some(&program_id));
 
             let message = format!(">> Get texture uniform {:?}", program_id);
             let location = try_opt(self.gl_ctx.get_uniform_location(program_id, tex_name), &message);
@@ -524,21 +525,30 @@ impl Backend for WebGLBackend {
         }
     }
 
-    fn upload_texture(&mut self, idx: usize, data: &[u8], width: u32, height: u32, format: PixelFormat) -> Result<> {
+    fn upload_texture(&mut self, idx: usize, data: &[u8], width: u32, height: u32, format: PixelFormat) -> Result<()> {
         unsafe {
             if idx >= self.tex_units.len() {
                 let message = format!("Texture index {} out of bounds for len={}", idx, self.tex_units.len());
                 return Err(QuicksilverError::ContextError(message));
             }
             let mut texture = &mut self.tex_units[idx];
+
+            // TBD:
+            // gl::Enable(gl::BLEND);
+            // gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
+
             let gl_format = format_gl(format);
 
-            self.gl_ctx.bind_texture(gl::TEXTURE_2D, Some(&texture.texture_id));
+            let texture_id = try_opt(self.gl_ctx.create_texture(), ">>> Create texture")?;
+
+            self.gl_ctx.active_texture(gl::TEXTURE0 + idx as u32);
+            self.gl_ctx.bind_texture(gl::TEXTURE_2D, Some(&texture_id));
             self.gl_ctx.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::CLAMP_TO_EDGE as i32);
             self.gl_ctx.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::CLAMP_TO_EDGE as i32);
             self.gl_ctx.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::NEAREST as i32);
             self.gl_ctx.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::NEAREST as i32);
-            let format = format as u32;
+            // let format = format as u32;
+            texture.texture_id = texture_id;
             self.gl_ctx.tex_image2_d(gl::TEXTURE_2D, 0, gl_format as i32, width as i32, height as i32, 0, gl_format, gl::UNSIGNED_BYTE, Some(data));
             // self.gl_ctx.generate_mipmap(gl::TEXTURE_2D);
             self.check_ok(line!());
@@ -552,19 +562,25 @@ impl Backend for WebGLBackend {
             return Err(QuicksilverError::ContextError(message));
         }
         let mut texture = &mut self.tex_units[idx];
-        let format = format_gl(format);
-        self.gl_ctx.tex_sub_image2_d(
-            gl::TEXTURE_2D,
-            0,
-            rect.x() as i32,
-            rect.y() as i32,
-            rect.width() as i32,
-            rect.height() as i32,
-            format,
-            gl::UNSIGNED_BYTE,
-            Some(data),
-        );
-        Ok(())
+        let gl_format = format_gl(format);
+
+        unsafe {
+            self.gl_ctx.use_program(Some(&texture.program_id));
+            self.gl_ctx.bind_texture(gl::TEXTURE_2D, Some(&texture.texture_id));
+
+            self.gl_ctx.tex_sub_image2_d(
+                gl::TEXTURE_2D,
+                0,
+                rect.x() as i32,
+                rect.y() as i32,
+                rect.width() as i32,
+                rect.height() as i32,
+                gl_format,
+                gl::UNSIGNED_BYTE,
+                Some(data),
+            );
+            Ok(())
+        }
     }
 
     unsafe fn draw_tasks(&mut self, tasks: &Vec<DrawTask>) -> Result<()> {
@@ -599,8 +615,8 @@ impl Backend for WebGLBackend {
             let array: TypedArray<f32> = vertices.as_slice().into();
             self.gl_ctx.buffer_sub_data(gl::ARRAY_BUFFER, 0, &array.buffer());
 
-            let mut ranges: Vec<(Option<u32>, Range<usize>)> = Vec::new();
             let ranges: Vec<(Option<u32>, Range<usize>)> = {
+                let mut ranges: Vec<(Option<u32>, Range<usize>)> = Vec::new();
                 if task.texture_idx == 0 {
                     let mut last_id: Option<u32> = None;
                     let mut range_start: usize = 0;
@@ -643,6 +659,9 @@ impl Backend for WebGLBackend {
 
                 let index_length = size_of::<u32>() * indices.len();
                 if index_length > self.index_length {
+                    let out = format!(">>> index_length new={:?} was={:?}", index_length, self.index_length);
+                    debug_log(&out);
+
                     self.index_length = index_length * 2;
                     self.gl_ctx.buffer_data(gl::ELEMENT_ARRAY_BUFFER, self.index_length as i64, gl::STREAM_DRAW);
                 }
@@ -659,23 +678,34 @@ impl Backend for WebGLBackend {
                         // debug_log(&out);
                         Some(result)
                     } else {
-                        debug_log("From texture");
-                        Some(texture.texture_id.clone())
+                        let raw = texture.texture_id.as_ref();
+                        let id = raw.as_raw() as u32;
+                        if id > 0 {
+                            debug_log("From texture");
+                            Some(texture.texture_id.clone())
+                        } else {
+                            None
+                        }
                     }
                 };
 
-                // let out = format!("idx={}: {:?} bind_tex: {:?}", idx, data.1.clone(), bind_tex);
-                // debug_log(&out);
 
-                self.gl_ctx.active_texture(gl::TEXTURE0 + idx as u32);
                     self.gl_ctx.uniform1i(texture.location_id.as_ref(), idx as i32);
                 // if idx > 0 {
                 // }
+                // if let Some(id) = bind_tex {
+
+                    if self.gl_ctx.is_texture(bind_tex.as_ref()) {
+                        let out = format!("idx={}: {:?} bind_tex: {:?}", idx, data.1.clone(), bind_tex);
+                        debug_log(&out);
+                        self.gl_ctx.active_texture(gl::TEXTURE0 + idx as u32);
+                        self.gl_ctx.bind_texture(gl::TEXTURE_2D, bind_tex.as_ref());
+                        self.gl_ctx.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, self.texture_mode as i32);
+                        self.gl_ctx.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, self.texture_mode as i32);
+                    }
+                // }
 
                 // if let Some(bind_tex) = bind_tex {
-                    self.gl_ctx.bind_texture(gl::TEXTURE_2D, bind_tex.as_ref());
-                    self.gl_ctx.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, self.texture_mode as i32);
-                    self.gl_ctx.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, self.texture_mode as i32);
                 // }
 
                 // self.check_ok(line!());
@@ -714,7 +744,7 @@ impl WebGLBackend {
             debug_log(&format!(">> ERROR at line {}", line));
             debug_log(gl_err_to_str(err));
         } else {
-            // debug_log(&format!(">> OK at line {}", line));
+            debug_log(&format!(">> OK at line {}", line));
         }
     }
 
