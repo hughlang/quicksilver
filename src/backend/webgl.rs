@@ -316,7 +316,10 @@ impl Backend for WebGLBackend {
     }
 
     unsafe fn destroy_texture(&mut self, data: &mut ImageData) {
-        self.gl_ctx.delete_texture(self.textures[data.id as usize].as_ref());
+        let out = format!("Destroying texture: {:?}", data.id);
+        debug_log(&out);
+        let tex = wrap_webgl::<WebGLTexture>(data.id);
+        self.gl_ctx.delete_texture(Some(tex).as_ref());
     }
 
     unsafe fn create_surface(&mut self, image: &Image) -> Result<SurfaceData> {
@@ -720,11 +723,13 @@ impl Backend for WebGLBackend {
 
     fn reset_gpu(&mut self) {
         unsafe {
-            for texture_id in &self.textures {
-                if let Some(texture_id) = texture_id {
-                    self.gl_ctx.delete_texture(Some(texture_id));
-                }
-            }
+            // for texture_id in &self.textures {
+            //     if let Some(texture_id) = texture_id {
+            //         let out = format!("Deleting basic texture: {:?}", texture_id);
+            //         debug_log(&out);
+            //         self.gl_ctx.delete_texture(Some(texture_id));
+            //     }
+            // }
             for (i, texture) in self.tex_units.iter().enumerate() {
                 if i > 0 {
 

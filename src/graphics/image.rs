@@ -110,6 +110,16 @@ impl Image {
     }
 }
 
+impl Drop for Image {
+    fn drop(&mut self) {
+        unsafe {
+            if let Some(data) = Rc::get_mut(&mut self.source) {
+                instance().destroy_texture(data);
+            }
+        }
+    }
+}
+
 #[derive(Debug)]
 ///An error generated while loading an image
 pub enum ImageError {
