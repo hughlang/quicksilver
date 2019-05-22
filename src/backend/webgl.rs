@@ -723,16 +723,8 @@ impl Backend for WebGLBackend {
 
     fn reset_gpu(&mut self) {
         unsafe {
-            // for texture_id in &self.textures {
-            //     if let Some(texture_id) = texture_id {
-            //         let out = format!("Deleting basic texture: {:?}", texture_id);
-            //         debug_log(&out);
-            //         self.gl_ctx.delete_texture(Some(texture_id));
-            //     }
-            // }
             for (i, texture) in self.tex_units.iter().enumerate() {
                 if i > 0 {
-
                     self.gl_ctx.delete_texture(Some(&texture.texture_id));
                     self.gl_ctx.delete_program(Some(&texture.program_id));
                     self.gl_ctx.delete_shader(Some(&texture.fragment_id));

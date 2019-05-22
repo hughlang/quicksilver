@@ -326,6 +326,7 @@ impl Backend for GL3Backend {
     }
 
     unsafe fn destroy_texture(&mut self, data: &mut ImageData) {
+        eprintln!("Destroying texture: {:?}", data.id);
         gl::DeleteTextures(1, &data.id as *const u32);
     }
 
