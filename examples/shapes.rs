@@ -10,15 +10,14 @@ use quicksilver::{
         geom::math::*,
         tessellation::{
             basic_shapes::*,
-            StrokeOptions,
+            {FillOptions, StrokeOptions},
         },
     },
     Result,
 };
 
 struct ShapesExample {
-    stroke_circle: Mesh,
-    draw_filled: bool,
+    shapes: Mesh,
 }
 
 impl State for ShapesExample {
@@ -27,24 +26,43 @@ impl State for ShapesExample {
         let stroke_options = StrokeOptions::tolerance(0.01)
             .with_line_width(1.0);
 
-        let mesh = {
-            let mut mesh = Mesh::new();
-            let mut renderer = ShapeRenderer::new(&mut mesh, Color::BLACK);
-            // renderer.set_transform(Transform::scale((3, 3)));
-            let result = stroke_circle(
-                point(100.0, 100.0),
-                10.0,
-                &stroke_options,
-                &mut renderer,
-            ).unwrap();
-            eprintln!("result vertices={:?} indices={:?}", result.vertices, result.indices);
+        let mut mesh = Mesh::new();
+        let mut renderer = ShapeRenderer::new(&mut mesh, Color::BLACK);
 
-            mesh
-        };
+        let result = stroke_circle(
+            point(100.0, 100.0),
+            10.0,
+            &stroke_options,
+            &mut renderer,
+        ).unwrap();
+        eprintln!("result vertices={:?} indices={:?}", result.vertices, result.indices);
+
+        stroke_rounded_rectangle(
+            &rect(100.0, 140.0, 100.0, 40.0),
+            &BorderRadii {
+                top_left: 2.0,
+                top_right: 2.0,
+                bottom_right: 3.0,
+                bottom_left: 3.0,
+            },
+            &stroke_options,
+            &mut renderer,
+        ).unwrap();
+
+        let fill_options = FillOptions::tolerance(0.01);
+
+        let result = fill_circle(
+            point(160.0, 100.0),
+            10.0,
+            &fill_options,
+            &mut renderer,
+        ).unwrap();
+
+
+        eprintln!("result vertices={:?} indices={:?}", result.vertices, result.indices);
 
         Ok(ShapesExample {
-            stroke_circle: mesh,
-            draw_filled: true,
+            shapes: mesh,
         })
     }
 
@@ -60,7 +78,7 @@ impl State for ShapesExample {
 
     fn draw(&mut self, window: &mut Window) -> Result<()> {
         window.clear(Color::WHITE)?;
-        window.mesh().extend(&self.stroke_circle);
+        window.mesh().extend(&self.shapes);
         Ok(())
     }
 }

@@ -121,6 +121,8 @@ pub struct DrawTask {
     pub vertices: Vec<Vertex>,
     /// All the triangles in the task
     pub triangles: Vec<GpuTriangle>,
+    /// The minimum size of the rendered content
+    pub content_size: (f32, f32),
 }
 
 impl DrawTask {
@@ -130,6 +132,7 @@ impl DrawTask {
             texture_idx: id,
             vertices: Vec::new(),
             triangles: Vec::new(),
+            content_size: (0.0, 0.0),
         }
     }
 }
