@@ -534,6 +534,19 @@ impl Window {
         img.flipv()
     }
 
+    /// Take a screenshot of the specified area of the screen.
+    pub fn capture(&mut self, rect: &Rectangle, format: PixelFormat) -> DynamicImage {
+        let (size, buffer) = unsafe { self.backend().capture(rect, format) };
+        let width = size.x as u32;
+        let height = size.y as u32;
+        let img = match format {
+            PixelFormat::RGB => DynamicImage::ImageRgb8(RgbImage::from_raw(width, height, buffer).expect("TODO")),
+            PixelFormat::RGBA => DynamicImage::ImageRgba8(RgbaImage::from_raw(width, height, buffer).expect("TODO")),
+            PixelFormat::Alpha => DynamicImage::ImageLumaA8(GrayAlphaImage::from_raw(width, height, buffer).expect("TODO")),
+        };
+        img.flipv()
+    }
+
     pub(crate) fn is_running(&self) -> bool {
         self.running
     }
@@ -565,7 +578,7 @@ impl Window {
         self.draw_tasks.push(task);
     }
 
-    /// Method that should be called when leaving a view, which will no longer be needed. 
+    /// Method that should be called when leaving a view, which will no longer be needed.
     pub fn reset_gpu(&mut self) {
         self.backend().reset_gpu();
     }
