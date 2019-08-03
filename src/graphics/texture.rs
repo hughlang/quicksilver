@@ -4,9 +4,8 @@
 use crate::{
     Result,
     backend::{Backend, instance},
-    geom::Rectangle,
+    geom::{Rectangle, Transform, Vector},
     graphics::{GpuTriangle, PixelFormat, Vertex},
-    lifecycle::Window,
 };
 
 // #[cfg(not(target_arch="wasm32"))]
@@ -135,4 +134,14 @@ impl DrawTask {
             content_size: (0.0, 0.0),
         }
     }
+
+    // pub fn apply_transform(&mut self, trans: Transform) -> Vec<Vertex> {
+    //     let mut results: Vec<Vertex> = Vec::new();
+    //     let vector = Vector::new(1, 2);
+    //     let result = vector * trans;
+    //     let vertices: Vec<Vertex> = self.vertices.iter().map(|mut v|
+    //         Vertex { pos: v.pos * trans, tex_pos: None, col: v.col }
+    //         ).collect();
+    //     vertices
+    // }
 }

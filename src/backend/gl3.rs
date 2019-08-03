@@ -95,11 +95,11 @@ impl Backend for GL3Backend {
     type Platform = WindowedContext;
 
     unsafe fn new(context: WindowedContext, texture_mode: ImageScaleStrategy, multisample: bool) -> Result<GL3Backend> {
-        // if gl::DebugMessageCallback::is_loaded() {
-        //     gl::Enable(gl::DEBUG_OUTPUT);
-        //     gl::DebugMessageCallback(debug_output_gl as GLDEBUGPROC, ptr::null());
-        //     gl::Enable(gl::DEBUG_OUTPUT_SYNCHRONOUS);
-        // }
+        if gl::DebugMessageCallback::is_loaded() {
+            gl::Enable(gl::DEBUG_OUTPUT);
+            gl::DebugMessageCallback(debug_output_gl as GLDEBUGPROC, ptr::null());
+            gl::Enable(gl::DEBUG_OUTPUT_SYNCHRONOUS);
+        }
         let texture_mode = match texture_mode {
             ImageScaleStrategy::Pixelate => gl::NEAREST,
             ImageScaleStrategy::Blur => gl::LINEAR
