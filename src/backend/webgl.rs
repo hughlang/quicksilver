@@ -3,7 +3,7 @@ use crate::{
     backend::{Backend, ImageData, SurfaceData, VERTEX_SIZE},
     geom::{Rectangle, Vector},
     error::QuicksilverError,
-    graphics::{BlendMode, Color, DrawTask, GpuTriangle, Image, ImageScaleStrategy, PixelFormat, Surface, Texture, Vertex},
+    graphics::{BlendMode, Color, MeshTask, GpuTriangle, Image, ImageScaleStrategy, PixelFormat, Surface, Texture, Vertex},
     input::MouseCursor,
 };
 use std::{
@@ -111,7 +111,7 @@ impl Backend for WebGLBackend {
         };
 
         let dt = Date::from_time(Date::now());
-        let out = format!("starting WebGL at UTC: {}", dt.to_time_string());        
+        let out = format!("starting WebGL at UTC: {}", dt.to_time_string());
         debug_log(&out);
 
         let texture_mode = match texture_mode {
@@ -295,7 +295,7 @@ impl Backend for WebGLBackend {
         self.gl_ctx.bind_texture(gl::TEXTURE_2D, None);
 
         let tex = try_opt(self.gl_ctx.create_texture(), "Create GL texture")?;
-        
+
         let id = unwrap_webgl::<WebGLTexture>(&tex);
         let out = format!("### Created texture id={:?} width={:?} height={:?}", id, width, height);
         debug_log(&out);
@@ -524,10 +524,10 @@ impl Backend for WebGLBackend {
                 return Err(QuicksilverError::ContextError(message));
             }
             let texture = &mut self.tex_units[idx];
-        
+
             self.gl_ctx.blend_func(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
             self.gl_ctx.enable(gl::BLEND);
-                
+
             let gl_format = format_gl(format);
             self.gl_ctx.bind_texture(gl::TEXTURE_2D, None);
 
@@ -545,7 +545,7 @@ impl Backend for WebGLBackend {
 
             let data = if data.len() == 0 { None } else { Some(data) };
             self.gl_ctx.tex_image2_d(gl::TEXTURE_2D, 0, gl_format as i32, width as i32, height as i32, 0, gl_format, gl::UNSIGNED_BYTE, data);
-            
+
             self.check_ok(line!());
             self.gl_ctx.use_program(None);
 
@@ -581,7 +581,7 @@ impl Backend for WebGLBackend {
         }
     }
 
-    unsafe fn draw_tasks(&mut self, tasks: &Vec<DrawTask>) -> Result<()> {
+    unsafe fn mesh_tasks(&mut self, tasks: &Vec<MeshTask>) -> Result<()> {
 
         for (_, task) in tasks.iter().enumerate() {
             if task.texture_idx >= self.tex_units.len() {
@@ -594,7 +594,7 @@ impl Backend for WebGLBackend {
             // let program_id = &texture.program_id;
             self.gl_ctx.use_program(Some(&texture.program_id));
 
-            // let out = format!("draw_tasks // idx={}: texture={:?} location={:?}", idx, texture.texture_id, texture.location_id);
+            // let out = format!("mesh_tasks // idx={}: texture={:?} location={:?}", idx, texture.texture_id, texture.location_id);
             // debug_log(&out);
 
             self.gl_ctx.uniform1i(texture.location_id.as_ref(), idx as i32);
@@ -734,7 +734,7 @@ impl Backend for WebGLBackend {
         }
     }
 
-    
+
 }
 
 impl WebGLBackend {

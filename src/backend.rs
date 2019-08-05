@@ -1,7 +1,7 @@
 use crate::{
     Result,
     geom::{Rectangle, Vector},
-    graphics::{Background::Col, BlendMode, Color, DrawTask, GpuTriangle, Image, ImageScaleStrategy, PixelFormat, Surface, Texture, Vertex},
+    graphics::{Background::Col, BlendMode, Color, MeshTask, GpuTriangle, Image, ImageScaleStrategy, PixelFormat, Surface, Texture, Vertex},
     input::MouseCursor,
 };
 
@@ -27,7 +27,7 @@ pub(crate) trait Backend {
     fn configure_texture<CB>(&mut self, idx: usize, fields: &Vec<(String, u32)>, cb: CB, out_color: &str, tex_name: &str) -> Result<()>
     where CB: Fn(Vertex) -> Vec<f32> + 'static;
 
-    unsafe fn draw_tasks(&mut self, tasks: &Vec<DrawTask>) -> Result<()>;
+    unsafe fn mesh_tasks(&mut self, tasks: &Vec<MeshTask>) -> Result<()>;
     fn reset_gpu(&mut self);
 
 

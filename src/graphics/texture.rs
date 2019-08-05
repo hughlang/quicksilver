@@ -110,10 +110,10 @@ impl Texture {
 }
 
 /// A temporary object holding the vertices and triangles to be drawn by the backend.
-/// The Window instance has a draw_tasks vector and each task is processed during the draw
+/// The Window instance has a mesh_tasks vector and each task is processed during the draw
 /// and flush stages
 #[derive(Clone)]
-pub struct DrawTask {
+pub struct MeshTask {
     /// The index value of the TextureUnit in backend.texture_units
     pub texture_idx: usize,
     /// All the vertices in the task
@@ -124,10 +124,10 @@ pub struct DrawTask {
     pub content_size: (f32, f32),
 }
 
-impl DrawTask {
-    /// Create DrawTask with the texture_id matching the Texture saved in backend.textures_map
+impl MeshTask {
+    /// Create MeshTask with the texture_id matching the Texture saved in backend.textures_map
     pub fn new(id: usize) -> Self {
-        DrawTask {
+        MeshTask {
             texture_idx: id,
             vertices: Vec::new(),
             triangles: Vec::new(),

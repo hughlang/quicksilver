@@ -2,7 +2,7 @@ use crate::{
     Result,
     backend::{Backend, BackendImpl, instance, set_instance},
     geom::{Rectangle, Scalar, Transform, Vector},
-    graphics::{Background, BlendMode, Color, Drawable, DrawTask, Mesh, PixelFormat, ResizeStrategy, Texture, View},
+    graphics::{Background, BlendMode, Color, Drawable, MeshTask, Mesh, PixelFormat, ResizeStrategy, Texture, View},
     input::{ButtonState, Gamepad, Keyboard, Mouse, MouseCursor},
     lifecycle::{Event, Settings},
 };
@@ -54,7 +54,7 @@ pub struct Window {
     last_framerate: f64,
     running: bool,
     fullscreen: bool,
-    draw_tasks: Vec<DrawTask>,
+    mesh_tasks: Vec<MeshTask>,
 }
 
 impl Window {
@@ -86,7 +86,7 @@ impl Window {
             last_framerate: 0.0,
             running: true,
             fullscreen: false,
-            draw_tasks: Vec::new(),
+            mesh_tasks: Vec::new(),
         };
         window.set_cursor(if settings.show_cursor {
             MouseCursor::Default
@@ -349,26 +349,26 @@ impl Window {
         self.mesh.triangles.sort();
 
         // let mut mesh_tasks = self.parse_mesh_tasks(&self.mesh);
-        // self.draw_tasks.append(&mut mesh_tasks);
+        // self.mesh_tasks.append(&mut mesh_tasks);
 
-        // Create DrawTask with texture_idx = 0, which is the default TextureUnit
-        let mut draw_task = DrawTask::new(0);
-        draw_task.vertices.append(&mut self.mesh.vertices);
-        draw_task.triangles.append(&mut self.mesh.triangles);
-        self.draw_tasks.insert(0, draw_task);
+        // Create MeshTask with texture_idx = 0, which is the default TextureUnit
+        let mut mesh_task = MeshTask::new(0);
+        mesh_task.vertices.append(&mut self.mesh.vertices);
+        mesh_task.triangles.append(&mut self.mesh.triangles);
+        self.mesh_tasks.insert(0, mesh_task);
 
-        for task in self.draw_tasks.iter_mut() {
+        for task in self.mesh_tasks.iter_mut() {
             for vertex in task.vertices.iter_mut() {
                 vertex.pos = self.view.opengl * vertex.pos;
             }
         }
 
         unsafe {
-            self.backend().draw_tasks(&self.draw_tasks)?;
+            self.backend().mesh_tasks(&self.mesh_tasks)?;
             self.backend().reset_blend_mode();
         }
         self.mesh.clear();
-        self.draw_tasks.clear();
+        self.mesh_tasks.clear();
         Ok(())
     }
 
@@ -574,8 +574,8 @@ impl Window {
     }
 
     /// Experimental method to make GL rendering more modular
-    pub fn add_task(&mut self, task: DrawTask) {
-        self.draw_tasks.push(task);
+    pub fn add_task(&mut self, task: MeshTask) {
+        self.mesh_tasks.push(task);
     }
 
     /// Method that should be called when leaving a view, which will no longer be needed.

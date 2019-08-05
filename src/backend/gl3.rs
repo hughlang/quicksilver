@@ -3,7 +3,7 @@ use crate::{
     backend::{Backend, ImageData, SurfaceData, VERTEX_SIZE},
     error::QuicksilverError,
     geom::{Rectangle, Vector},
-    graphics::{BlendMode, Color, DrawTask, GpuTriangle, Image, ImageScaleStrategy, PixelFormat, Surface, Texture, Vertex},
+    graphics::{BlendMode, Color, MeshTask, GpuTriangle, Image, ImageScaleStrategy, PixelFormat, Surface, Texture, Vertex},
     input::MouseCursor
 };
 use gl::types::*;
@@ -188,7 +188,7 @@ impl Backend for GL3Backend {
         gl::BlendEquationSeparate(gl::FUNC_ADD, gl::FUNC_ADD);
     }
 
-    // TODO: Deprecate. Replaced with draw_tasks
+    // TODO: Deprecate. Replaced with mesh_tasks
     unsafe fn draw(&mut self, vertices: &[Vertex], triangles: &[GpuTriangle]) -> Result<()> {
         // Not helpful
         // let texture = &self.tex_units[0];
@@ -270,7 +270,7 @@ impl Backend for GL3Backend {
         Ok(())
     }
 
-    // TODO: Deprecate. Replaced with draw_tasks
+    // TODO: Deprecate. Replaced with mesh_tasks
     unsafe fn flush(&mut self) -> Result<()> {
         // println!("### GL3 flush");
         if self.indices.len() != 0 {
@@ -312,7 +312,7 @@ impl Backend for GL3Backend {
         };
         eprintln!("### Created texture id={} width={:?} height={:?}", id, width, height);
         // gl::ActiveTexture(gl::TEXTURE0 as u32);
-        gl::BindTexture(gl::TEXTURE_2D, id);  // WARN: Enabling this makes draw_tasks fail
+        gl::BindTexture(gl::TEXTURE_2D, id);  // WARN: Enabling this makes mesh_tasks fail
         gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::CLAMP_TO_EDGE as i32);
         gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::CLAMP_TO_EDGE as i32);
         gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::NEAREST as i32);
@@ -636,7 +636,7 @@ impl Backend for GL3Backend {
 
     /// The logic in this method handles the overly complex situation where all of the vertices and triangles
     /// that were accumulated in Mesh are batched together.
-    unsafe fn draw_tasks(&mut self, tasks: &Vec<DrawTask>) -> Result<()> {
+    unsafe fn mesh_tasks(&mut self, tasks: &Vec<MeshTask>) -> Result<()> {
         for (_, task) in tasks.iter().enumerate() {
 
             if task.texture_idx >= self.tex_units.len() {
@@ -727,7 +727,7 @@ impl Backend for GL3Backend {
                 if gl::IsTexture(texture_id) == gl::TRUE {
                     gl::BindTexture(gl::TEXTURE_2D, texture_id);
                 } else {
-                    // eprintln!("draw_tasks {:?} is NOT a texture", texture_id);
+                    // eprintln!("mesh_tasks {:?} is NOT a texture", texture_id);
                 }
 
                 // gl::Uniform1i(texture.location_id, idx as i32);

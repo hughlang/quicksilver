@@ -24,7 +24,7 @@ pub use self::{
     blend_mode::BlendMode,
     color::Color,
     drawable::{Background, Drawable},
-    texture::{DrawTask, Texture},
+    texture::{MeshTask, Texture},
     image::{Image, ImageError, PixelFormat},
     image_scale_strategy::ImageScaleStrategy,
     mesh::Mesh,
