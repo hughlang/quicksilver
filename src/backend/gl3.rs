@@ -154,7 +154,7 @@ impl Backend for GL3Backend {
 
         // Create the default texture which is shared by all of the standard Drawables when
         // DrawElements is called. The texture_idx will be 0
-        let texture = Texture::default()
+        let texture = Texture::new("default")
             .with_shaders(DEFAULT_VERTEX_SHADER, DEFAULT_FRAGMENT_SHADER)
             .with_fields(TEX_FIELDS, serialize_vertex, OUT_COLOR, SAMPLER);
 
@@ -440,10 +440,10 @@ impl Backend for GL3Backend {
     /// contains all of the parameters needed. This does not create or upload a texture, which
     /// is a secondary step.
     fn create_texture_unit(&mut self, texture: &Texture) -> Result<(usize)> {
-        let texture_idx = self.prepare_texture(&texture.vertex_shader, &texture.fragment_shader)?;
-        self.configure_texture(texture_idx, &texture.fields, serialize_vertex, &texture.out_color, &texture.sampler)?;
+        let pointer = self.prepare_texture(&texture.vertex_shader, &texture.fragment_shader)?;
+        self.configure_texture(pointer, &texture.fields, serialize_vertex, &texture.out_color, &texture.sampler)?;
 
-        Ok(texture_idx)
+        Ok(pointer)
     }
 
     fn prepare_texture(&mut self, vertex_shader: &str, fragment_shader: &str) -> Result<usize> {
@@ -460,8 +460,9 @@ impl Backend for GL3Backend {
 
             let idx = self.tex_units.len();
             eprintln!("==Prepare=========================================================");
-            eprintln!(">>> Globals vao={} vbo={} ebo={}", self.vao, self.vbo, self.ebo);
-            eprintln!(">>> Created program_id={} vertex_id={} fragment_id={} texture_id={}", program_id, vertex_id, fragment_id, texture_id);
+            // eprintln!(">>> Globals vao={} vbo={} ebo={}", self.vao, self.vbo, self.ebo);
+            eprintln!(">>> Created program_id={}", program_id);
+            // eprintln!(">>> vertex_id={} fragment_id={}", vertex_id, fragment_id);
 
             // Create a no-op serializer function
             let serializer = |_vertex| -> Vec<f32> {
@@ -490,7 +491,6 @@ impl Backend for GL3Backend {
             return Err(QuicksilverError::ContextError(message));
         }
         let texture = &mut self.tex_units[idx];
-        // let texture_id = texture.texture_id;
         let program_id = texture.program_id;
         self.tex_units[idx].serializer = Box::new(cb);
 
@@ -573,6 +573,11 @@ impl Backend for GL3Backend {
             gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::NEAREST as i32);
             gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::NEAREST as i32);
             // gl::Enable(gl::TEXTURE_2D);
+            if texture_id > 0 {
+                eprintln!("{}/ >>> Created texture_id={}", idx, texture_id);
+            } else {
+                eprintln!("==ERROR in GenTextures=========================================================");
+            }
 
             // Save the new id for later use
             texture.texture_id = texture_id;
@@ -589,7 +594,6 @@ impl Backend for GL3Backend {
             gl::GetTexLevelParameteriv(gl::TEXTURE_2D, 0, gl::TEXTURE_HEIGHT, &mut tex_height);
 
             eprintln!(">>> TEX width={:?} height={:?}", tex_width, tex_height);
-            eprintln!(">>> Uploaded Texture: idx={} for texture_id={:?} size={}x{}", idx, texture.texture_id, width, height);
             gl::UseProgram(0);
 
             Ok(())
@@ -602,7 +606,7 @@ impl Backend for GL3Backend {
             return Err(QuicksilverError::ContextError(message));
         }
         let texture = &self.tex_units[idx];
-        let id = texture.texture_id;
+        let tex_id = texture.texture_id;
 
         let gl_format = format_gl(format);
         // let gl_bytes = byte_size(format);
@@ -614,8 +618,8 @@ impl Backend for GL3Backend {
 
             gl::ActiveTexture(gl::TEXTURE0 + idx as u32);
             // https://www.khronos.org/opengl/wiki/GLAPI/glTexSubImage2D
-            gl::BindTexture(gl::TEXTURE_2D, id);
-            // gl::Uniform1i(texture.location_aid, idx as i32);
+            gl::BindTexture(gl::TEXTURE_2D, tex_id);
+            gl::Uniform1i(texture.location_id, idx as i32);
 
             gl::TexSubImage2D(
                 gl::TEXTURE_2D,
@@ -636,15 +640,15 @@ impl Backend for GL3Backend {
 
     /// The logic in this method handles the overly complex situation where all of the vertices and triangles
     /// that were accumulated in Mesh are batched together.
-    unsafe fn mesh_tasks(&mut self, tasks: &Vec<MeshTask>) -> Result<()> {
+    unsafe fn execute_tasks(&mut self, tasks: &Vec<MeshTask>) -> Result<()> {
         for (_, task) in tasks.iter().enumerate() {
 
-            if task.texture_idx >= self.tex_units.len() {
-                eprintln!("Texture index {} out of bounds for len={}", task.texture_idx, self.tex_units.len());
+            if task.pointer >= self.tex_units.len() {
+                eprintln!("Texture index {} out of bounds for len={}", task.pointer, self.tex_units.len());
                 continue;
             }
-            let idx = task.texture_idx as u32;
-            let texture = &self.tex_units[task.texture_idx];
+            let idx = task.pointer as u32;
+            let texture = &self.tex_units[task.pointer];
             // let texture_id = texture.texture_id;
             gl::ActiveTexture(gl::TEXTURE0 + idx);
             gl::UseProgram(texture.program_id);
@@ -658,7 +662,7 @@ impl Backend for GL3Backend {
             }
             let vertex_length = size_of::<f32>() * vertices.len();
             if vertex_length > self.vertex_length {
-                eprintln!(">>> vertex_length new={:?} was={:?}", vertex_length, self.vertex_length);
+                eprintln!("{}/ >>> vertex_length new={:?} was={:?}", idx, vertex_length, self.vertex_length);
                 self.vertex_length = vertex_length * 2;
                 // Create the vertex array
                 gl::BufferData(gl::ARRAY_BUFFER, self.vertex_length as isize, nullptr(), gl::STATIC_DRAW);
@@ -669,7 +673,7 @@ impl Backend for GL3Backend {
             let ranges: Vec<(Option<u32>, Range<usize>)> = {
 
                 let mut ranges: Vec<(Option<u32>, Range<usize>)> = Vec::new();
-                if task.texture_idx == 0 {
+                if task.pointer == 0 {
                     let mut last_id: Option<u32> = None;
                     let mut range_start: usize = 0;
 
@@ -710,7 +714,7 @@ impl Backend for GL3Backend {
                 let index_data = indices.as_ptr() as *const c_void;
                 // If the GPU can't store all of our data, re-create the GPU buffers so they can
                 if index_length > self.index_length {
-                    eprintln!("1>>> index_length new={:?} was={:?}", index_length, self.index_length);
+                    eprintln!("{}/ >>> index_length new={:?} was={:?}", idx, index_length, self.index_length);
                     self.index_length = index_length * 2;
                     gl::BufferData(gl::ELEMENT_ARRAY_BUFFER, self.index_length as isize, nullptr(), gl::STATIC_DRAW);
                 }
@@ -727,10 +731,10 @@ impl Backend for GL3Backend {
                 if gl::IsTexture(texture_id) == gl::TRUE {
                     gl::BindTexture(gl::TEXTURE_2D, texture_id);
                 } else {
-                    // eprintln!("mesh_tasks {:?} is NOT a texture", texture_id);
+                    // eprintln!("execute_tasks {:?} is NOT a texture", texture_id);
                 }
 
-                // gl::Uniform1i(texture.location_id, idx as i32);
+                gl::Uniform1i(texture.location_id, idx as i32);
                 gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, self.texture_mode as i32);
                 gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, self.texture_mode as i32);
 

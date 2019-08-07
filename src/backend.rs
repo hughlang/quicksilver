@@ -27,7 +27,7 @@ pub(crate) trait Backend {
     fn configure_texture<CB>(&mut self, idx: usize, fields: &Vec<(String, u32)>, cb: CB, out_color: &str, tex_name: &str) -> Result<()>
     where CB: Fn(Vertex) -> Vec<f32> + 'static;
 
-    unsafe fn mesh_tasks(&mut self, tasks: &Vec<MeshTask>) -> Result<()>;
+    unsafe fn execute_tasks(&mut self, tasks: &Vec<MeshTask>) -> Result<()>;
     fn reset_gpu(&mut self);
 
 

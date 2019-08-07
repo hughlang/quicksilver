@@ -364,7 +364,7 @@ impl Window {
         }
 
         unsafe {
-            self.backend().mesh_tasks(&self.mesh_tasks)?;
+            self.backend().execute_tasks(&self.mesh_tasks)?;
             self.backend().reset_blend_mode();
         }
         self.mesh.clear();

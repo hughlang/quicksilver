@@ -4,7 +4,7 @@
 use crate::{
     Result,
     backend::{Backend, instance},
-    geom::{Rectangle, Transform, Vector},
+    geom::Rectangle,
     graphics::{GpuTriangle, PixelFormat, Vertex},
 };
 
@@ -18,6 +18,8 @@ use crate::{
 /// different shader programs and expected outputs.
 // #[derive(Clone)]
 pub struct Texture {
+    /// The human-readable name to identify this texture. Used in debug output for easier tracking
+    pub name: String,
     /// The glsl code for the vertex shader
     pub vertex_shader: String,
     /// The glsl code for the fragment shader
@@ -32,12 +34,14 @@ pub struct Texture {
     pub serializer: Box<dyn Fn(Vertex) -> Vec<f32> + 'static>,
 }
 
-impl Default for Texture {
-    fn default() -> Self {
+impl Texture {
+    /// Constructor
+    pub fn new(name: &str) -> Self {
         let default = |_vertex| -> Vec<f32> {
             Vec::new()
         };
         Texture {
+            name: name.to_string(),
             vertex_shader: String::default(),
             fragment_shader: String::default(),
             fields: Vec::new(),
@@ -45,6 +49,10 @@ impl Default for Texture {
             sampler: String::default(),
             serializer: Box::new(default),
         }
+    }
+    /// Set the name
+    pub fn set_name(&mut self, name: &str) {
+        self.name = name.to_string();
     }
 }
 
@@ -115,7 +123,7 @@ impl Texture {
 #[derive(Clone)]
 pub struct MeshTask {
     /// The index value of the TextureUnit in backend.texture_units
-    pub texture_idx: usize,
+    pub pointer: usize,
     /// All the vertices in the task
     pub vertices: Vec<Vertex>,
     /// All the triangles in the task
@@ -128,7 +136,7 @@ impl MeshTask {
     /// Create MeshTask with the texture_id matching the Texture saved in backend.textures_map
     pub fn new(id: usize) -> Self {
         MeshTask {
-            texture_idx: id,
+            pointer: id,
             vertices: Vec::new(),
             triangles: Vec::new(),
             content_size: (0.0, 0.0),

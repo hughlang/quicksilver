@@ -133,7 +133,7 @@ impl Backend for WebGLBackend {
         let initial_width = canvas.width();
         let initial_height = canvas.height();
 
-        let texture = Texture::default()
+        let texture = Texture::default("default")
             .with_shaders(DEFAULT_VERTEX_SHADER, DEFAULT_FRAGMENT_SHADER)
             .with_fields(TEX_FIELDS, serialize_vertex, OUT_COLOR, SAMPLER);
 
@@ -581,14 +581,14 @@ impl Backend for WebGLBackend {
         }
     }
 
-    unsafe fn mesh_tasks(&mut self, tasks: &Vec<MeshTask>) -> Result<()> {
+    unsafe fn execute_tasks(&mut self, tasks: &Vec<MeshTask>) -> Result<()> {
 
         for (_, task) in tasks.iter().enumerate() {
-            if task.texture_idx >= self.tex_units.len() {
-                eprintln!("Texture index {} out of bounds for len={}", task.texture_idx, self.tex_units.len());
+            if task.pointer >= self.tex_units.len() {
+                eprintln!("Texture index {} out of bounds for len={}", task.pointer, self.tex_units.len());
                 continue;
             }
-            let idx = task.texture_idx;
+            let idx = task.pointer;
             let texture = &mut self.tex_units[idx];
 
             // let program_id = &texture.program_id;
@@ -633,7 +633,7 @@ impl Backend for WebGLBackend {
 
             let ranges: Vec<(Option<u32>, Range<usize>)> = {
                 let mut ranges: Vec<(Option<u32>, Range<usize>)> = Vec::new();
-                if task.texture_idx == 0 {
+                if task.pointer == 0 {
                     let mut last_id: Option<u32> = None;
                     let mut range_start: usize = 0;
                     for (i, triangle) in task.triangles.iter().enumerate() {
