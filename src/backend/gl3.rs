@@ -32,7 +32,7 @@ extern "system" fn debug_output_gl(_source: GLenum, _type: GLenum, _id: GLuint, 
             CStr::from_ptr(message)
         };
         let text = slice.to_str().unwrap();
-        eprintln!("OpenGL Debug: {}", text);
+        log::debug!("OpenGL Debug: {}", text);
     }
 }
 
@@ -137,7 +137,7 @@ impl Backend for GL3Backend {
         let fragment: u32 = 0;
         let vertex:u32 = 0;
 
-        eprintln!("### GL3Backend.new – Using program={:?} vao={} vbo={} ebo={}", shader, vao, vbo, ebo);
+        log::debug!("### GL3Backend.new – Using program={:?} vao={} vbo={} ebo={}", shader, vao, vbo, ebo);
         let mut backend = GL3Backend {
             context,
             texture: NULL_TEXTURE_ID,
@@ -161,7 +161,7 @@ impl Backend for GL3Backend {
         let texture_idx = backend.create_texture_unit(&texture)?;
         let unit = &backend.tex_units[texture_idx];
         backend.shader = unit.program_id;
-        eprintln!("### Created default texture_unit idx={} texture_id={} program_id={}", texture_idx, unit.texture_id, unit.program_id);
+        log::debug!("### Created default texture_unit idx={} texture_id={} program_id={}", texture_idx, unit.texture_id, unit.program_id);
         // let result = backend.upload_texture(0, &[], 1024, 1024, PixelFormat::RGBA);
 
 
@@ -211,7 +211,7 @@ impl Backend for GL3Backend {
         let vertex_length = size_of::<f32>() * self.vertices.len();
         // If the GPU can't store all of our data, re-create the GPU buffers so they can
         if vertex_length > self.vertex_length {
-            eprintln!("### vertex_length new={:?} was={:?}", vertex_length, self.vertex_length);
+            log::debug!("### vertex_length new={:?} was={:?}", vertex_length, self.vertex_length);
             self.vertex_length = vertex_length * 2;
             // Create strings for all of the shader attributes
             let position_string = CString::new("position").expect("No interior null bytes in shader").into_raw();
@@ -278,7 +278,7 @@ impl Backend for GL3Backend {
             let index_length = size_of::<u32>() * self.indices.len();
             let index_data = self.indices.as_ptr() as *const c_void;
             if index_length > self.index_length {
-                eprintln!("### index_length new={:?} was={:?}", index_length, self.index_length);
+                log::debug!("### index_length new={:?} was={:?}", index_length, self.index_length);
                 self.index_length = index_length * 2;
                 gl::BufferData(gl::ELEMENT_ARRAY_BUFFER, self.index_length as isize, nullptr(), gl::STREAM_DRAW);
             }
@@ -286,7 +286,7 @@ impl Backend for GL3Backend {
             // Upload the texture to the GPU
             gl::ActiveTexture(gl::TEXTURE0);
             if self.texture != 0 {
-                // eprintln!("### flush, BindTexture={:?} location={:?}", self.texture, self.texture_location);
+                // log::debug!("### flush, BindTexture={:?} location={:?}", self.texture, self.texture_location);
                 gl::BindTexture(gl::TEXTURE_2D, self.texture);
                 gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, self.texture_mode as i32);
                 gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, self.texture_mode as i32);
@@ -310,7 +310,7 @@ impl Backend for GL3Backend {
             gl::GenTextures(1, &mut texture as *mut u32);
             texture
         };
-        eprintln!("### Created texture id={} width={:?} height={:?}", id, width, height);
+        log::debug!("### Created texture id={} width={:?} height={:?}", id, width, height);
         // gl::ActiveTexture(gl::TEXTURE0 as u32);
         gl::BindTexture(gl::TEXTURE_2D, id);  // WARN: Enabling this makes mesh_tasks fail
         gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::CLAMP_TO_EDGE as i32);
@@ -326,7 +326,7 @@ impl Backend for GL3Backend {
     }
 
     unsafe fn destroy_texture(&mut self, data: &mut ImageData) {
-        eprintln!("Destroying texture: {:?}", data.id);
+        log::debug!("Destroying texture: {:?}", data.id);
         gl::DeleteTextures(1, &data.id as *const u32);
     }
 
@@ -459,10 +459,10 @@ impl Backend for GL3Backend {
             let texture_id = 0;  // Initially set to 0. Will be assigned in upload_texture
 
             let idx = self.tex_units.len();
-            eprintln!("==Prepare=========================================================");
-            // eprintln!(">>> Globals vao={} vbo={} ebo={}", self.vao, self.vbo, self.ebo);
-            eprintln!(">>> Created program_id={}", program_id);
-            // eprintln!(">>> vertex_id={} fragment_id={}", vertex_id, fragment_id);
+            log::debug!("==Prepare=========================================================");
+            // log::debug!(">>> Globals vao={} vbo={} ebo={}", self.vao, self.vbo, self.ebo);
+            log::debug!(">>> Created program_id={}", program_id);
+            // log::debug!(">>> vertex_id={} fragment_id={}", vertex_id, fragment_id);
 
             // Create a no-op serializer function
             let serializer = |_vertex| -> Vec<f32> {
@@ -497,14 +497,14 @@ impl Backend for GL3Backend {
         let float_size = size_of::<f32>() as u32;
         let vert_size = fields.iter().fold(0, |acc, x| acc + x.1);
         let stride_distance = (vert_size * float_size) as i32;
-        eprintln!("Configuring texture idx={}, program_id={} vert_size={} float_size={}", idx, program_id, vert_size, float_size);
+        log::debug!("Configuring texture idx={}, program_id={} vert_size={} float_size={}", idx, program_id, vert_size, float_size);
 
         unsafe {
 
             let raw = CString::new(tex_name).expect("No color name").into_raw();
             let location = gl::GetUniformLocation(program_id, raw as *mut i8);
             self.tex_units[idx].location_id = location;
-            eprintln!(">>> texture location={:?} for program_id={:?}", location, program_id);
+            log::debug!(">>> texture location={:?} for program_id={:?}", location, program_id);
             CString::from_raw(raw);
 
             // Map the out_color variable name to the fragment shader output
@@ -516,12 +516,12 @@ impl Backend for GL3Backend {
             let mut offset = 0;
             for (v_field, float_count) in fields {
                 let count = *float_count;
-                eprintln!("[{:?}] stride_distance={:?} offset={:?}", &v_field, stride_distance, offset);
+                log::debug!("[{:?}] stride_distance={:?} offset={:?}", &v_field, stride_distance, offset);
                 let c_name = CString::new(v_field.to_string()).expect("No interior null bytes in shader").into_raw();
                 let attr = gl::GetAttribLocation(program_id, c_name as *const i8);
                 CString::from_raw(c_name);
                 if attr < 0 {
-                    eprintln!("configure_fields error: attr={:?} y={:?}", attr, 0);
+                    log::debug!("configure_fields error: attr={:?} y={:?}", attr, 0);
                     return Err(QuicksilverError::ContextError(format!("{} GetAttribLocation -> {}", v_field, attr)));
                 }
 
@@ -574,9 +574,9 @@ impl Backend for GL3Backend {
             gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::NEAREST as i32);
             // gl::Enable(gl::TEXTURE_2D);
             if texture_id > 0 {
-                eprintln!("{}/ >>> Created texture_id={}", idx, texture_id);
+                log::debug!("{}/ >>> Created texture_id={}", idx, texture_id);
             } else {
-                eprintln!("==ERROR in GenTextures=========================================================");
+                log::debug!("==ERROR in GenTextures=========================================================");
             }
 
             // Save the new id for later use
@@ -593,7 +593,7 @@ impl Backend for GL3Backend {
             gl::GetTexLevelParameteriv(gl::TEXTURE_2D, 0, gl::TEXTURE_WIDTH, &mut tex_width);
             gl::GetTexLevelParameteriv(gl::TEXTURE_2D, 0, gl::TEXTURE_HEIGHT, &mut tex_height);
 
-            eprintln!(">>> TEX width={:?} height={:?}", tex_width, tex_height);
+            log::debug!(">>> TEX width={:?} height={:?}", tex_width, tex_height);
             gl::UseProgram(0);
 
             Ok(())
@@ -610,7 +610,7 @@ impl Backend for GL3Backend {
 
         let gl_format = format_gl(format);
         // let gl_bytes = byte_size(format);
-        // eprintln!("Updating [{}] texture_id={:?} rect={:?} format={:?}", idx, id, rect, gl_format);
+        // log::debug!("Updating [{}] texture_id={:?} rect={:?} format={:?}", idx, id, rect, gl_format);
 
         unsafe {
 
@@ -644,7 +644,7 @@ impl Backend for GL3Backend {
         for (_, task) in tasks.iter().enumerate() {
 
             if task.pointer >= self.tex_units.len() {
-                eprintln!("Texture index {} out of bounds for len={}", task.pointer, self.tex_units.len());
+                log::debug!("Texture index {} out of bounds for len={}", task.pointer, self.tex_units.len());
                 continue;
             }
             let idx = task.pointer as u32;
@@ -662,7 +662,7 @@ impl Backend for GL3Backend {
             }
             let vertex_length = size_of::<f32>() * vertices.len();
             if vertex_length > self.vertex_length {
-                eprintln!("{}/ >>> vertex_length new={:?} was={:?}", idx, vertex_length, self.vertex_length);
+                log::debug!("{}/ >>> vertex_length new={:?} was={:?}", idx, vertex_length, self.vertex_length);
                 self.vertex_length = vertex_length * 2;
                 // Create the vertex array
                 gl::BufferData(gl::ARRAY_BUFFER, self.vertex_length as isize, nullptr(), gl::STATIC_DRAW);
@@ -686,7 +686,7 @@ impl Backend for GL3Backend {
                             }
                         };
                         if img_id != last_id {
-                            // eprintln!("img_id changed new={:?} was={:?}", img_id, last_id);
+                            // log::debug!("img_id changed new={:?} was={:?}", img_id, last_id);
                             let range: Range<usize> = range_start..i;
                             ranges.push((last_id, range));
                             range_start = i;
@@ -707,14 +707,14 @@ impl Backend for GL3Backend {
                 let range = data.1.clone();
                 let mut indices: Vec<u32> = Vec::new();
                 for triangle in &task.triangles[range] {
-                    // eprintln!("add indices={:?} range={:?}", &triangle.indices, data.1.clone());
+                    // log::debug!("add indices={:?} range={:?}", &triangle.indices, data.1.clone());
                     indices.extend_from_slice(&triangle.indices);
                 }
                 let index_length = size_of::<u32>() * indices.len();
                 let index_data = indices.as_ptr() as *const c_void;
                 // If the GPU can't store all of our data, re-create the GPU buffers so they can
                 if index_length > self.index_length {
-                    eprintln!("{}/ >>> index_length new={:?} was={:?}", idx, index_length, self.index_length);
+                    log::debug!("{}/ >>> index_length new={:?} was={:?}", idx, index_length, self.index_length);
                     self.index_length = index_length * 2;
                     gl::BufferData(gl::ELEMENT_ARRAY_BUFFER, self.index_length as isize, nullptr(), gl::STATIC_DRAW);
                 }
@@ -731,7 +731,7 @@ impl Backend for GL3Backend {
                 if gl::IsTexture(texture_id) == gl::TRUE {
                     gl::BindTexture(gl::TEXTURE_2D, texture_id);
                 } else {
-                    // eprintln!("execute_tasks {:?} is NOT a texture", texture_id);
+                    // log::debug!("execute_tasks {:?} is NOT a texture", texture_id);
                 }
 
                 gl::Uniform1i(texture.location_id, idx as i32);
@@ -806,7 +806,7 @@ impl GL3Backend {
 
         let raw = CString::new("font_tex").expect("No color name").into_raw();
         let location = gl::GetUniformLocation(program, raw as *mut i8);
-        eprintln!(">>> link_program texture location={:?} for program_id={:?}", location, program);
+        log::debug!(">>> link_program texture location={:?} for program_id={:?}", location, program);
         CString::from_raw(raw);
 
         // Get the link status
