@@ -127,8 +127,6 @@ extern crate serde_derive;
 #[macro_use]
 extern crate stdweb;
 
-// extern crate log;
-
 mod backend;
 mod error;
 mod file;

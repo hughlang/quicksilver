@@ -133,7 +133,7 @@ impl Backend for WebGLBackend {
         let initial_width = canvas.width();
         let initial_height = canvas.height();
 
-        let texture = Texture::default("default")
+        let texture = Texture::new("default")
             .with_shaders(DEFAULT_VERTEX_SHADER, DEFAULT_FRAGMENT_SHADER)
             .with_fields(TEX_FIELDS, serialize_vertex, OUT_COLOR, SAMPLER);
 
