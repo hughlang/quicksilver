@@ -70,7 +70,7 @@ fn try_opt<T>(opt: Option<T>, operation: &str) -> Result<T> {
 }
 
 pub fn debug_log(text: &str) {
-    console!(log, text);
+    // console!(log, text);
 }
 
 fn gl_err_to_str(err: u32) -> &'static str {
@@ -593,9 +593,10 @@ impl Backend for WebGLBackend {
 
             // let program_id = &texture.program_id;
             self.gl_ctx.use_program(Some(&texture.program_id));
+            // debug_log(&format!(">> OK at line {}", line!()));
 
-            // let out = format!("mesh_tasks // idx={}: texture={:?} location={:?}", idx, texture.texture_id, texture.location_id);
-            // debug_log(&out);
+            let out = format!("mesh_tasks // idx={}: texture={:?} location={:?}", idx, texture.texture_id, texture.location_id);
+            debug_log(&out);
 
             self.gl_ctx.uniform1i(texture.location_id.as_ref(), idx as i32);
             if idx > 0 {
@@ -603,6 +604,8 @@ impl Backend for WebGLBackend {
             } else {
                 self.gl_ctx.active_texture(gl::TEXTURE0);
             }
+
+            debug_log(&format!(">> OK at line {}", line!()));
 
             // let message = format!(">> Get texture uniform {:?}", texture.program_id);
             // let location = try_opt(self.gl_ctx.get_uniform_location(&texture.program_id, "tex"), &message);
@@ -654,8 +657,8 @@ impl Backend for WebGLBackend {
                     }
                     // Add the last range
                     let range: Range<usize> = range_start..task.triangles.len();
-                    // let out = format!(">>> last_id={:?} range={:?}", last_id, range);
-                    // debug_log(&out);
+                    let out = format!(">>> last_id={:?} range={:?}", last_id, range);
+                    debug_log(&out);
 
                     ranges.push((last_id, range));
                     ranges
@@ -668,6 +671,7 @@ impl Backend for WebGLBackend {
                     ranges
                 }
             };
+            debug_log(&format!(">> OK at line {}", line!()));
 
             for data in &ranges {
                 let range = data.1.clone();
@@ -690,6 +694,8 @@ impl Backend for WebGLBackend {
                 let array: TypedArray<u32> = indices.as_slice().into();
                 self.gl_ctx.buffer_sub_data(gl::ELEMENT_ARRAY_BUFFER, 0, &array.buffer());
 
+                debug_log(&format!(">> OK at line {}", line!()));
+
                 // debug_log(text: &str)
 
                 let bind_tex = {
@@ -701,14 +707,15 @@ impl Backend for WebGLBackend {
                 };
 
                 let tex_id: u32 = unwrap_webgl::<WebGLTexture>(&bind_tex);
+                debug_log(&format!(">> OK at line {}", line!()));
 
                 if tex_id > 0 && self.gl_ctx.is_texture(Some(&bind_tex)) {
-                    // let out = format!("idx={} location={:?} tex={:?}", idx, texture.location_id, bind_tex);
-                    // debug_log(&out);
+                    let out = format!("idx={} location={:?} tex={:?}", idx, texture.location_id, bind_tex);
+                    debug_log(&out);
                     self.gl_ctx.bind_texture(gl::TEXTURE_2D, Some(&bind_tex));
                 } else {
-                    // let out = format!("BAD: idx={} location={:?} tex={:?}", idx, texture.location_id, bind_tex);
-                    // debug_log(&out);
+                    let out = format!("BAD: idx={} location={:?} tex={:?}", idx, texture.location_id, bind_tex);
+                    debug_log(&out);
 
                 }
                 self.gl_ctx.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, self.texture_mode as i32);
