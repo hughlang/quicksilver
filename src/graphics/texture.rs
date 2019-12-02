@@ -3,9 +3,9 @@
 ///
 use crate::{
     Result,
-    backend::{Backend, instance},
-    geom::Rectangle,
-    graphics::{GpuTriangle, Mesh, PixelFormat, Vertex},
+    backend::{instance, Backend},
+    geom::{Rectangle, Transform, Vector},
+    graphics::{Background, GpuTriangle, Mesh, PixelFormat, Vertex},
 };
 
 // #[cfg(not(target_arch="wasm32"))]
@@ -143,6 +143,23 @@ impl MeshTask {
         }
     }
 
+    /// Add vertices from an iterator, some transforms, and a background
+    pub fn add_positioned_vertices(&mut self, vertices: impl Iterator<Item = Vector>,
+        trans: Transform, tex_trans: Option<Transform>, bkg: Background) -> u32 {
+            let offset = self.vertices.len();
+            self.vertices.extend(vertices
+            .map(|v| Vertex::new(trans * v, tex_trans.map(|trans| trans * v), bkg)));
+            offset as u32
+    }
+
+    /// Modify the vertices with a new Transform. Only works for a rectangular Mesh
+    pub fn apply_transform(&mut self, trans: Transform) {
+        let verts = &[Vector::ZERO, Vector::X, Vector::ONE, Vector::Y];
+        for (i, v) in &mut self.vertices.iter_mut().enumerate() {
+            v.pos = trans * verts[i];
+        }
+    }
+
     /// Appends vertices and triangles from a Mesh by offsetting the indices in the GpuTriangle with
     /// the current length of the vertices
     pub fn append(&mut self, other: &mut Mesh) {
@@ -159,14 +176,4 @@ impl MeshTask {
             }).collect();
         self.triangles.extend(triangles.iter().cloned());
     }
-
-    // pub fn apply_transform(&mut self, trans: Transform) -> Vec<Vertex> {
-    //     let mut results: Vec<Vertex> = Vec::new();
-    //     let vector = Vector::new(1, 2);
-    //     let result = trans * vector;
-    //     let vertices: Vec<Vertex> = self.vertices.iter().map(|mut v|
-    //         Vertex { pos: v.pos * trans, tex_pos: None, col: v.col }
-    //         ).collect();
-    //     vertices
-    // }
 }
