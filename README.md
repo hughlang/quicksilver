@@ -89,8 +89,8 @@ On Windows and Mac, all you'll need to build Quicksilver is a recent stable vers
 
 ### Deploying for desktop
 
-If you're deploying for desktop platforms, build in release mode (`cargo build --release`) 
-and copy the executable file produced (found at "target/release/") and any assets you used (image files 
+If you're deploying for desktop platforms, build in release mode (`cargo build --release`)
+and copy the executable file produced (found at "target/release/") and any assets you used (image files
 etc) and create an archive (on Windows a zip file, on Unix a tar file). You should be able to distribute
 this archive with no problems; if there are any, please open an issue.
 
@@ -98,29 +98,29 @@ this archive with no problems; if there are any, please open an issue.
 
 If you're deploying for the web, first make sure you've [installed the cargo web tool](https://github.com/koute/cargo-web). Then use the `cargo web deploy` to build your application for distribution (located at `target/deploy`).
 
-If you want to test your application locally, use `cargo web start` and open your favorite browser to the port it provides. 
+If you want to test your application locally, use `cargo web start` and open your favorite browser to the port it provides.
 
 ## Optional Features
 
-Quicksilver by default tries to provide all features a 2D application may need, but not all applications need these features. 
-The optional features available are 
-collision support (via [ncollide2d](https://github.com/sebcrozet/ncollide)), 
-font support (via [rusttype](https://github.com/redox-os/rusttype)), 
-gamepad support (via [gilrs](https://gitlab.com/gilrs-project/gilrs)), 
+Quicksilver by default tries to provide all features a 2D application may need, but not all applications need these features.
+The optional features available are
+collision support (via [ncollide2d](https://github.com/sebcrozet/ncollide)),
+font support (via [rusttype](https://github.com/redox-os/rusttype)),
+gamepad support (via [gilrs](https://gitlab.com/gilrs-project/gilrs)),
 saving (via [serde_json](https://github.com/serde-rs/json)),
 complex shape / svg rendering (via [lyon](https://github.com/nical/lyon)),
 immediate-mode GUIs (via [immi](https://github.com/tomaka/immi)),
-and sounds (via [rodio](https://github.com/tomaka/rodio)). 
+and sounds (via [rodio](https://github.com/tomaka/rodio)).
 
-Each are enabled by default, but you can [specify which features](https://doc.rust-lang.org/cargo/reference/specifying-dependencies.html#choosing-features) you actually want to use. 
+Each are enabled by default, but you can [specify which features](https://doc.rust-lang.org/cargo/reference/specifying-dependencies.html#choosing-features) you actually want to use.
 
 ## Supported Platforms
 
-The engine is supported on Windows, macOS, Linux, and the web via WebAssembly. 
+The engine is supported on Windows, macOS, Linux, and the web via WebAssembly.
 The web is only supported via the `wasm32-unknown-unknown` Rust target, not through emscripten.
 It might work with emscripten but this is not an ongoing guarantee.
 
-On desktop it requires OpenGL 3.2; on the web it requires WebGL 2.0.
+On desktop it requires OpenGL 3.2; on the web it requires WebGL 1.0.
 
 Mobile support would be a future possibility, but likely only through external contributions.
 

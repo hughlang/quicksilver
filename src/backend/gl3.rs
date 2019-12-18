@@ -77,7 +77,7 @@ const NULL_TEXTURE_ID: u32 = 0;
 
 fn format_gl(format: PixelFormat) -> u32 {
     match format {
-        PixelFormat::Alpha => gl::RED,
+        PixelFormat::Alpha => gl::SRC_ALPHA,
         PixelFormat::RGB => gl::RGB,
         PixelFormat::RGBA => gl::RGBA
     }

@@ -23,10 +23,10 @@ use stdweb::{
 use webgl_stdweb::{
     WebGLBuffer,
     WebGLProgram,
-    WebGL2RenderingContext as gl,
     WebGLShader,
     WebGLTexture,
     WebGLUniformLocation,
+    WebGLRenderingContext as gl,
 };
 use stdweb::web::document;
 use stdweb::web::Date;
@@ -51,7 +51,7 @@ pub struct WebGLBackend {
 
 fn format_gl(format: PixelFormat) -> u32 {
     match format {
-        PixelFormat::Alpha => gl::RED,
+        PixelFormat::Alpha => gl::SRC_ALPHA,
         PixelFormat::RGB => gl::RGB,
         PixelFormat::RGBA => gl::RGBA
     }
@@ -114,6 +114,9 @@ impl Backend for WebGLBackend {
         let out = format!("starting WebGL at UTC: {}", dt.to_time_string());
         debug_log(&out);
 
+        if gl_ctx.get_extension::<webgl_stdweb::OES_element_index_uint>().is_none() {
+            return Err(QuicksilverError::ContextError("Could not aquire OES_element_index_uint extension.".to_owned()))
+        }
         let texture_mode = match texture_mode {
             ImageScaleStrategy::Pixelate => gl::NEAREST,
             ImageScaleStrategy::Blur => gl::LINEAR
@@ -328,7 +331,7 @@ impl Backend for WebGLBackend {
         };
         self.gl_ctx.bind_framebuffer(gl::FRAMEBUFFER, Some(&surface.framebuffer));
         self.gl_ctx.framebuffer_texture2_d(gl::FRAMEBUFFER, gl::COLOR_ATTACHMENT0, gl::TEXTURE_2D, self.textures[image.get_id() as usize].as_ref(), 0);
-        self.gl_ctx.draw_buffers(&[gl::COLOR_ATTACHMENT0]);
+        self.gl_ctx.bind_framebuffer(gl::FRAMEBUFFER, None);
         Ok(surface)
     }
 
