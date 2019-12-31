@@ -154,8 +154,8 @@ fn run_impl<T: State, F: FnOnce()->Result<T>>(title: &str, size: Vector, setting
         app.event_buffer.push(Event::MouseButton(button, state));
     });
 
-    // Try to handle safari mouse events
-    // TODO:
+    // Handle Safari mouse events. The default Safari macos app only supports WebGL 1.0 and only uses
+    // legacy mouse events (instead of Pointer Events). Note that this also works with iOS Safari
     handle_event(&canvas, &app, |mut app, event: MouseMoveEvent| {
         let position = Vector::new(event.offset_x() as f32, event.offset_y() as f32);
         let position = app.window.project() * (position - app.window.screen_offset());
@@ -256,6 +256,7 @@ fn handle_event<T, E, F>(
 {
     let application = application.clone();
     target.add_event_listener(move |event: E| {
+        log::trace!("handle_event {:?}", event.event_type());
         event.prevent_default();
         event.stop_propagation();
         event.cancel_bubble();
