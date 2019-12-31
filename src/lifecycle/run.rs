@@ -26,7 +26,8 @@ use {
                 BlurEvent, ConcreteEvent, FocusEvent, GamepadConnectedEvent, GamepadDisconnectedEvent,
                 IGamepadEvent, IKeyboardEvent, IMouseEvent, KeyDownEvent, KeyUpEvent,
                 MouseButton as WebMouseButton, PointerDownEvent, PointerMoveEvent, PointerOutEvent,
-                PointerOverEvent, PointerUpEvent, ResizeEvent
+                PointerOverEvent, PointerUpEvent, ResizeEvent, TouchEvent, MouseMoveEvent, MouseDownEvent,
+                MouseUpEvent
             }
         }
     }
@@ -144,6 +145,34 @@ fn run_impl<T: State, F: FnOnce()->Result<T>>(title: &str, size: Vector, setting
     });
     handle_event(&canvas, &app, |mut app, event: PointerDownEvent| {
         let state = ButtonState::Pressed;
+        let button = match event.button() {
+            WebMouseButton::Left => MouseButton::Left,
+            WebMouseButton::Wheel => MouseButton::Middle,
+            WebMouseButton::Right => MouseButton::Right,
+            _ => return,
+        };
+        app.event_buffer.push(Event::MouseButton(button, state));
+    });
+
+    // Try to handle safari mouse events
+    // TODO:
+    handle_event(&canvas, &app, |mut app, event: MouseMoveEvent| {
+        let position = Vector::new(event.offset_x() as f32, event.offset_y() as f32);
+        let position = app.window.project() * (position - app.window.screen_offset());
+        app.event_buffer.push(Event::MouseMoved(position));
+    });
+    handle_event(&canvas, &app, |mut app, event: MouseDownEvent| {
+        let state = ButtonState::Pressed;
+        let button = match event.button() {
+            WebMouseButton::Left => MouseButton::Left,
+            WebMouseButton::Wheel => MouseButton::Middle,
+            WebMouseButton::Right => MouseButton::Right,
+            _ => return,
+        };
+        app.event_buffer.push(Event::MouseButton(button, state));
+    });
+    handle_event(&document, &app, |mut app, event: MouseUpEvent| {
+        let state = ButtonState::Released;
         let button = match event.button() {
             WebMouseButton::Left => MouseButton::Left,
             WebMouseButton::Wheel => MouseButton::Middle,
