@@ -26,7 +26,8 @@ use {
                 BlurEvent, ConcreteEvent, FocusEvent, GamepadConnectedEvent, GamepadDisconnectedEvent,
                 IGamepadEvent, IKeyboardEvent, IMouseEvent, KeyDownEvent, KeyUpEvent,
                 MouseButton as WebMouseButton, PointerDownEvent, PointerMoveEvent, PointerOutEvent,
-                PointerOverEvent, PointerUpEvent, ResizeEvent
+                PointerOverEvent, PointerUpEvent, ResizeEvent, TouchEvent, MouseMoveEvent, MouseDownEvent,
+                MouseUpEvent
             }
         }
     }
@@ -153,6 +154,34 @@ fn run_impl<T: State, F: FnOnce()->Result<T>>(title: &str, size: Vector, setting
         app.event_buffer.push(Event::MouseButton(button, state));
     });
 
+    // Handle Safari mouse events. The default Safari macos app only supports WebGL 1.0 and only uses
+    // legacy mouse events (instead of Pointer Events). Note that this also works with iOS Safari
+    handle_event(&canvas, &app, |mut app, event: MouseMoveEvent| {
+        let position = Vector::new(event.offset_x() as f32, event.offset_y() as f32);
+        let position = app.window.project() * (position - app.window.screen_offset());
+        app.event_buffer.push(Event::MouseMoved(position));
+    });
+    handle_event(&canvas, &app, |mut app, event: MouseDownEvent| {
+        let state = ButtonState::Pressed;
+        let button = match event.button() {
+            WebMouseButton::Left => MouseButton::Left,
+            WebMouseButton::Wheel => MouseButton::Middle,
+            WebMouseButton::Right => MouseButton::Right,
+            _ => return,
+        };
+        app.event_buffer.push(Event::MouseButton(button, state));
+    });
+    handle_event(&document, &app, |mut app, event: MouseUpEvent| {
+        let state = ButtonState::Released;
+        let button = match event.button() {
+            WebMouseButton::Left => MouseButton::Left,
+            WebMouseButton::Wheel => MouseButton::Middle,
+            WebMouseButton::Right => MouseButton::Right,
+            _ => return,
+        };
+        app.event_buffer.push(Event::MouseButton(button, state));
+    });
+
     let key_names = generate_key_names();
     handle_event(&document, &app, move |mut app, event: KeyDownEvent| {
         // Winit doesn't filter to printable Typed events, so it should just be up to the user
@@ -227,6 +256,7 @@ fn handle_event<T, E, F>(
 {
     let application = application.clone();
     target.add_event_listener(move |event: E| {
+        log::trace!("handle_event {:?}", event.event_type());
         event.prevent_default();
         event.stop_propagation();
         event.cancel_bubble();

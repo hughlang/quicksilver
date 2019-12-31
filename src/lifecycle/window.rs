@@ -170,6 +170,7 @@ impl Window {
     }
 
     pub(crate) fn process_event(&mut self, event: &Event) {
+        log::trace!("process_event {:?}", event);
         match event {
             &Event::Key(key, state) => self.keyboard.process_event(key as usize, state),
             &Event::MouseMoved(pos) => {

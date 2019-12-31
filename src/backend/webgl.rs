@@ -111,8 +111,7 @@ impl Backend for WebGLBackend {
         };
 
         let dt = Date::from_time(Date::now());
-        let out = format!("starting WebGL at UTC: {}", dt.to_time_string());
-        debug_log(&out);
+        log::debug!("starting WebGL at UTC: {}", dt.to_time_string());
 
         if gl_ctx.get_extension::<webgl_stdweb::OES_element_index_uint>().is_none() {
             return Err(QuicksilverError::ContextError("Could not aquire OES_element_index_uint extension.".to_owned()))
@@ -159,8 +158,7 @@ impl Backend for WebGLBackend {
 
         let texture_idx = backend.create_texture_unit(&texture)?;
         let unit = &backend.tex_units[texture_idx];
-        let out = format!("### Created default texture_unit idx={:?} texture_id={:?} program_id={:?}", texture_idx, unit.texture_id, unit.program_id);
-        debug_log(&out);
+        log::debug!("### Created default texture_unit idx={:?} texture_id={:?} program_id={:?}", texture_idx, unit.texture_id, unit.program_id);
 
         Ok(backend)
     }
@@ -187,9 +185,7 @@ impl Backend for WebGLBackend {
 
     unsafe fn draw(&mut self, vertices: &[Vertex], triangles: &[GpuTriangle]) -> Result<()> {
 
-        // debug_log("### WebGL draw");
-        // let out = format!("### WebGL draw vertices={:?} triangles={:?}", vertices.len(), triangles.len());
-        // debug_log(&out);
+        // log::debug!("### WebGL draw vertices={:?} triangles={:?}", vertices.len(), triangles.len());
 
         // Turn the provided vertex data into stored vertex data
         vertices.iter().for_each(|vertex| {
@@ -255,7 +251,7 @@ impl Backend for WebGLBackend {
     }
 
     unsafe fn flush(&mut self) -> Result<()> {
-        // debug_log("WebGL flush");
+        // log::debug!("WebGL flush");
         if self.indices.len() != 0 {
             let texture = &mut self.tex_units[0];
             self.gl_ctx.use_program(Some(&texture.program_id));
@@ -270,8 +266,6 @@ impl Backend for WebGLBackend {
             self.gl_ctx.buffer_sub_data(gl::ELEMENT_ARRAY_BUFFER, 0, &array.buffer());
             // Upload the texture to the GPU
             self.gl_ctx.active_texture(gl::TEXTURE0);
-            // let out = format!("### FLUSH texture={:?}", self.texture);
-            // debug_log(&out);
 
             if let Some(index) = self.texture {
                 self.gl_ctx.bind_texture(gl::TEXTURE_2D, self.textures[index as usize].as_ref());
@@ -300,27 +294,27 @@ impl Backend for WebGLBackend {
         let tex = try_opt(self.gl_ctx.create_texture(), "Create GL texture")?;
 
         let id = unwrap_webgl::<WebGLTexture>(&tex);
-        let out = format!("### Created texture id={:?} width={:?} height={:?}", id, width, height);
-        debug_log(&out);
+        log::debug!("### Created texture id={:?} width={:?} height={:?}", id, width, height);
 
-        let texture = &mut self.tex_units[0];
-
+        // let texture = &mut self.tex_units[0];
         self.gl_ctx.bind_texture(gl::TEXTURE_2D, Some(&tex));
-        self.gl_ctx.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::CLAMP_TO_EDGE as i32);
-        self.gl_ctx.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::CLAMP_TO_EDGE as i32);
-        self.gl_ctx.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::NEAREST as i32);
-        self.gl_ctx.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::NEAREST as i32);
         self.gl_ctx.tex_image2_d(gl::TEXTURE_2D, 0, format as i32, width as i32, height as i32, 0, format, gl::UNSIGNED_BYTE, Some(data));
-        self.gl_ctx.generate_mipmap(gl::TEXTURE_2D);
 
+        if width.is_power_of_two() && height.is_power_of_two() {
+            self.gl_ctx.generate_mipmap(gl::TEXTURE_2D);
+        } else {
+            self.gl_ctx.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::CLAMP_TO_EDGE as i32);
+            self.gl_ctx.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::CLAMP_TO_EDGE as i32);
+            self.gl_ctx.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::NEAREST as i32);
+            self.gl_ctx.tex_parameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::NEAREST as i32);
+        }
         self.textures.push(Some(tex));
 
         Ok(ImageData { id, width, height })
     }
 
     unsafe fn destroy_texture(&mut self, data: &mut ImageData) {
-        let out = format!("Destroying texture: {:?}", data.id);
-        debug_log(&out);
+        log::debug!("Destroying texture: {:?}", data.id);
         let tex = wrap_webgl::<WebGLTexture>(data.id);
         self.gl_ctx.delete_texture(Some(tex).as_ref());
     }
@@ -360,6 +354,16 @@ impl Backend for WebGLBackend {
     }
 
     unsafe fn set_viewport(&mut self, area: Rectangle) {
+        // let size: LogicalSize = area.size().into();
+        // let dpi = self.context.get_hidpi_factor();
+        // self.context.resize(size.to_physical(dpi));
+        // let dpi = dpi as f32;
+        // gl::Viewport(
+        //     (area.x() * dpi) as i32,
+        //     (area.y() * dpi) as i32,
+        //     (area.width() * dpi) as i32,
+        //     (area.height() * dpi) as i32
+        // );
         self.gl_ctx.viewport(
             area.x() as i32,
             area.y() as i32,
@@ -438,8 +442,7 @@ impl Backend for WebGLBackend {
             self.check_ok(line!());
             return Ok(texture_idx);
         } else {
-            let out = format!(">>> {:?}", result);
-            debug_log(&out);
+            log::debug!(">>> {:?}", result);
             return result;
         }
     }
@@ -495,8 +498,7 @@ impl Backend for WebGLBackend {
             if location.is_ok() {
                 texture.location_id = Some(location.unwrap());
             }
-            let out = format!("Configure texture idx={:?}, program={:?}, location={:?}", idx, program_id, texture.location_id);
-            debug_log(&out);
+            log::debug!("Configure texture idx={:?}, program={:?}, location={:?}", idx, program_id, texture.location_id);
 
             for (v_field, float_count) in fields {
                 let count = *float_count;
@@ -513,8 +515,7 @@ impl Backend for WebGLBackend {
             }
             self.gl_ctx.use_program(None);
 
-            let out = format!("Configure fields={:?} location={:?} program_id={:?}", fields, texture.location_id, program_id);
-            debug_log(&out);
+            log::debug!("Configure fields={:?} location={:?} program_id={:?}", fields, texture.location_id, program_id);
 
             Ok(())
         }
@@ -535,8 +536,7 @@ impl Backend for WebGLBackend {
             self.gl_ctx.bind_texture(gl::TEXTURE_2D, None);
 
             let texture_id = try_opt(self.gl_ctx.create_texture(), ">>> Create texture")?;
-            let out = format!(">>> Uploading Texture: idx={} for texture_id={:?} size={}x{} data={}", idx, texture_id, width, height, data.len());
-            debug_log(&out);
+            log::debug!(">>> Uploading Texture: idx={} for texture_id={:?} size={}x{} data={}", idx, texture_id, width, height, data.len());
 
             self.gl_ctx.active_texture(gl::TEXTURE0 + idx as u32);
             self.gl_ctx.bind_texture(gl::TEXTURE_2D, Some(&texture_id));
@@ -596,10 +596,8 @@ impl Backend for WebGLBackend {
 
             // let program_id = &texture.program_id;
             self.gl_ctx.use_program(Some(&texture.program_id));
-            // debug_log(&format!(">> OK at line {}", line!()));
 
-            let out = format!("mesh_tasks // idx={}: texture={:?} location={:?}", idx, texture.texture_id, texture.location_id);
-            debug_log(&out);
+            // log::debug!("mesh_tasks // idx={}: texture={:?} location={:?}", idx, texture.texture_id, texture.location_id);
 
             self.gl_ctx.uniform1i(texture.location_id.as_ref(), idx as i32);
             if idx > 0 {
@@ -608,7 +606,7 @@ impl Backend for WebGLBackend {
                 self.gl_ctx.active_texture(gl::TEXTURE0);
             }
 
-            debug_log(&format!(">> OK at line {}", line!()));
+            // debug_log(&format!(">> OK at line {}", line!()));
 
             // let message = format!(">> Get texture uniform {:?}", texture.program_id);
             // let location = try_opt(self.gl_ctx.get_uniform_location(&texture.program_id, "tex"), &message);
@@ -627,8 +625,7 @@ impl Backend for WebGLBackend {
             }
             let vertex_length = size_of::<f32>() * vertices.len();
             if vertex_length > self.vertex_length {
-                let out = format!(">>> vertex_length new={:?} was={:?}", vertex_length, self.vertex_length);
-                debug_log(&out);
+                log::debug!(">>> vertex_length new={:?} was={:?}", vertex_length, self.vertex_length);
                 self.vertex_length = vertex_length * 2;
                 // Create the vertex array
                 self.gl_ctx.buffer_data(gl::ARRAY_BUFFER, self.vertex_length as i64, gl::STREAM_DRAW);
@@ -660,36 +657,31 @@ impl Backend for WebGLBackend {
                     }
                     // Add the last range
                     let range: Range<usize> = range_start..task.triangles.len();
-                    let out = format!(">>> last_id={:?} range={:?}", last_id, range);
-                    debug_log(&out);
+                    // log::debug!(">>> last_id={:?} range={:?}", last_id, range);
 
                     ranges.push((last_id, range));
                     ranges
                 } else {
                     let range: Range<usize> = 0..task.triangles.len();
-                    // let out = format!(">>> idx={:?} range={:?}", idx, range);
-                    // debug_log(&out);
+                    // log::debug!(">>> idx={:?} range={:?}", idx, range);
                     let id = unwrap_webgl::<WebGLTexture>(&texture.texture_id);
                     ranges.push((Some(id), range));
                     ranges
                 }
             };
-            debug_log(&format!(">> OK at line {}", line!()));
 
             for data in &ranges {
                 let range = data.1.clone();
                 // Upload the texture to the GPU
                 let mut indices: Vec<u32> = Vec::new();
                 for triangle in &task.triangles[range] {
-                    // let out = format!("add indices={:?} range={:?}", &triangle.indices, data.1.clone());
-                    // debug_log(&out);
+                    // log::debug!("add indices={:?} range={:?}", &triangle.indices, data.1.clone());
                     indices.extend_from_slice(&triangle.indices);
                 }
 
                 let index_length = size_of::<u32>() * indices.len();
                 if index_length > self.index_length {
-                    let out = format!(">>> index_length new={:?} was={:?}", index_length, self.index_length);
-                    debug_log(&out);
+                    log::debug!(">>> index_length new={:?} was={:?}", index_length, self.index_length);
 
                     self.index_length = index_length * 2;
                     self.gl_ctx.buffer_data(gl::ELEMENT_ARRAY_BUFFER, self.index_length as i64, gl::STREAM_DRAW);
@@ -697,7 +689,7 @@ impl Backend for WebGLBackend {
                 let array: TypedArray<u32> = indices.as_slice().into();
                 self.gl_ctx.buffer_sub_data(gl::ELEMENT_ARRAY_BUFFER, 0, &array.buffer());
 
-                debug_log(&format!(">> OK at line {}", line!()));
+                // debug_log(&format!(">> OK at line {}", line!()));
 
                 // debug_log(text: &str)
 
@@ -710,7 +702,7 @@ impl Backend for WebGLBackend {
                 };
 
                 let tex_id: u32 = unwrap_webgl::<WebGLTexture>(&bind_tex);
-                debug_log(&format!(">> OK at line {}", line!()));
+                // debug_log(&format!(">> OK at line {}", line!()));
 
                 if tex_id > 0 && self.gl_ctx.is_texture(Some(&bind_tex)) {
                     let out = format!("idx={} location={:?} tex={:?}", idx, texture.location_id, bind_tex);
