@@ -104,9 +104,10 @@ impl Window {
         let mut window = glutin::WindowBuilder::new()
             .with_title(title)
             .with_dimensions(user_size.into());
-        if let Some(path) = settings.icon_path {
-            window = window.with_window_icon(Some(Icon::from_path(path)?));
-        }
+        // FIXME: Disabled icon loading because it uses jpeg_decoder
+        // if let Some(path) = settings.icon_path {
+        //     window = window.with_window_icon(Some(Icon::from_path(path)?));
+        // }
         if let Some(v) = settings.min_size {
             window = window.with_min_dimensions(v.into());
         }
