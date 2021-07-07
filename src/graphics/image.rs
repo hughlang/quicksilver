@@ -17,6 +17,8 @@ use std::{
 ///Pixel formats for use with loading raw images
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub enum PixelFormat {
+    /// Alpha only
+    Alpha,
     /// Red, Green, and Blue
     RGB,
     /// Red, Green, Blue, and Alpha
@@ -52,9 +54,11 @@ impl Image {
 
     /// Load an image from pixel values in a byte array
     pub fn from_raw(data: &[u8], width: u32, height: u32, format: PixelFormat) -> Result<Image> {
-        Ok(unsafe {
-            Image::new(instance().create_texture(data, width, height, format)?)
-        })
+        unsafe {
+            let img = instance().create_texture(data, width, height, format)?;
+            let result = Image::new(img);
+            Ok(result)
+        }
     }
 
     /// Load an image directly from an encoded byte array
@@ -142,7 +146,7 @@ impl Error for ImageError {
             &ImageError::IOError(ref err) => err.description(),
         }
     }
-    
+
     fn cause(&self) -> Option<&dyn Error> {
         match self {
             &ImageError::DecodingError(ref err) => Some(err),

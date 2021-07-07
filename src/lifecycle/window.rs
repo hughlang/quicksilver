@@ -2,12 +2,12 @@ use crate::{
     Result,
     backend::{Backend, BackendImpl, instance, set_instance},
     geom::{Rectangle, Scalar, Transform, Vector},
-    graphics::{Background, BlendMode, Color, Drawable, Mesh, PixelFormat, ResizeStrategy, View},
+    graphics::{Background, BlendMode, Color, Drawable, MeshTask, Mesh, PixelFormat, ResizeStrategy, Texture, View},
     input::{ButtonState, Gamepad, Keyboard, Mouse, MouseCursor},
     lifecycle::{Event, Settings},
 };
 use image::{
-    DynamicImage, RgbImage, RgbaImage,
+    DynamicImage, GrayAlphaImage, RgbImage, RgbaImage,
 };
 #[cfg(feature = "gilrs")] use {
     crate::input::{GAMEPAD_BUTTON_LIST, GILRS_GAMEPAD_LIST},
@@ -30,7 +30,7 @@ use {
 #[cfg(not(target_arch = "wasm32"))]
 use {
     gl,
-    glutin::{self, EventsLoop, ContextTrait, Icon}
+    glutin::{self, EventsLoop, ContextTrait, Icon, Robustness}
 };
 
 
@@ -54,6 +54,7 @@ pub struct Window {
     last_framerate: f64,
     running: bool,
     fullscreen: bool,
+    mesh_tasks: Vec<MeshTask>,
 }
 
 impl Window {
@@ -84,7 +85,8 @@ impl Window {
             fps: 0.0,
             last_framerate: 0.0,
             running: true,
-            fullscreen: false
+            fullscreen: false,
+            mesh_tasks: Vec::new(),
         };
         window.set_cursor(if settings.show_cursor {
             MouseCursor::Default
@@ -92,6 +94,7 @@ impl Window {
             MouseCursor::None
         });
         window.set_fullscreen(settings.fullscreen);
+        window.set_size(actual_size);
         Ok(window)
     }
 
@@ -101,9 +104,10 @@ impl Window {
         let mut window = glutin::WindowBuilder::new()
             .with_title(title)
             .with_dimensions(user_size.into());
-        if let Some(path) = settings.icon_path {
-            window = window.with_window_icon(Some(Icon::from_path(path)?));
-        }
+        // FIXME: Disabled icon loading because it uses jpeg_decoder
+        // if let Some(path) = settings.icon_path {
+        //     window = window.with_window_icon(Some(Icon::from_path(path)?));
+        // }
         if let Some(v) = settings.min_size {
             window = window.with_min_dimensions(v.into());
         }
@@ -112,7 +116,10 @@ impl Window {
         };
         let context = glutin::ContextBuilder::new()
             .with_vsync(settings.vsync)
-            .with_multisampling(settings.multisampling.unwrap_or(0));
+            .with_multisampling(settings.multisampling.unwrap_or(0))
+            .with_gl_robustness(Robustness::TryRobustLoseContextOnReset)
+            .with_gl_debug_flag(true)
+            ;
         let gl_window = glutin::WindowedContext::new_windowed(window, context, &events)?;
         unsafe {
             gl_window.make_current()?;
@@ -164,6 +171,7 @@ impl Window {
     }
 
     pub(crate) fn process_event(&mut self, event: &Event) {
+        log::trace!("process_event {:?}", event);
         match event {
             &Event::Key(key, state) => self.keyboard.process_event(key as usize, state),
             &Event::MouseMoved(pos) => {
@@ -341,13 +349,28 @@ impl Window {
     /// Note that calling this can be an expensive operation
     pub fn flush(&mut self) -> Result<()> {
         self.mesh.triangles.sort();
-        for vertex in self.mesh.vertices.iter_mut() {
-            vertex.pos = self.view.opengl * vertex.pos;
+
+        // let mut mesh_tasks = self.parse_mesh_tasks(&self.mesh);
+        // self.mesh_tasks.append(&mut mesh_tasks);
+
+        // Create MeshTask with texture_idx = 0, which is the default TextureUnit
+        let mut mesh_task = MeshTask::new(0);
+        mesh_task.vertices.append(&mut self.mesh.vertices);
+        mesh_task.triangles.append(&mut self.mesh.triangles);
+        self.mesh_tasks.insert(0, mesh_task);
+
+        for task in self.mesh_tasks.iter_mut() {
+            for vertex in task.vertices.iter_mut() {
+                vertex.pos = self.view.opengl * vertex.pos;
+            }
         }
+
         unsafe {
-            self.backend().draw(self.mesh.vertices.as_slice(), self.mesh.triangles.as_slice())?;
+            self.backend().execute_tasks(&self.mesh_tasks)?;
+            self.backend().reset_blend_mode();
         }
         self.mesh.clear();
+        self.mesh_tasks.clear();
         Ok(())
     }
 
@@ -508,6 +531,20 @@ impl Window {
         let img = match format {
             PixelFormat::RGB => DynamicImage::ImageRgb8(RgbImage::from_raw(width, height, buffer).expect("TODO")),
             PixelFormat::RGBA => DynamicImage::ImageRgba8(RgbaImage::from_raw(width, height, buffer).expect("TODO")),
+            PixelFormat::Alpha => DynamicImage::ImageLumaA8(GrayAlphaImage::from_raw(width, height, buffer).expect("TODO")),
+        };
+        img.flipv()
+    }
+
+    /// Take a screenshot of the specified area of the screen.
+    pub fn capture(&mut self, rect: &Rectangle, format: PixelFormat) -> DynamicImage {
+        let (size, buffer) = unsafe { self.backend().capture(rect, format) };
+        let width = size.x as u32;
+        let height = size.y as u32;
+        let img = match format {
+            PixelFormat::RGB => DynamicImage::ImageRgb8(RgbImage::from_raw(width, height, buffer).expect("TODO")),
+            PixelFormat::RGBA => DynamicImage::ImageRgba8(RgbaImage::from_raw(width, height, buffer).expect("TODO")),
+            PixelFormat::Alpha => DynamicImage::ImageLumaA8(GrayAlphaImage::from_raw(width, height, buffer).expect("TODO")),
         };
         img.flipv()
     }
@@ -518,5 +555,33 @@ impl Window {
 
     pub(crate) fn backend(&mut self) -> &'static mut BackendImpl {
         unsafe { instance() }
+    }
+
+    // pub fn build_textures(&mut self, textures: &Vec<Texture>) -> Result<Vec<usize>> {
+    //     let id_list = self.backend().assign_texture_units(&textures);
+    // }
+
+    /// Passthru method to access the backend OpenGL/WebGL method
+    pub fn create_texture(&mut self, texture: &Texture) -> Result<usize> {
+        self.backend().create_texture_unit(texture)
+    }
+
+    /// Passthru method to access the backend OpenGL/WebGL method.
+    /// This is designed to update a rect region in the texture already created in the GPU.
+    pub fn update_texture(&mut self, texture_idx: usize, data: &[u8], rect: &Rectangle, format: PixelFormat) {
+        let result = self.backend().update_texture(texture_idx, data, rect, format);
+        if result.is_err() {
+            eprintln!("ERROR={:?}", result);
+        }
+    }
+
+    /// Experimental method to make GL rendering more modular
+    pub fn add_task(&mut self, task: MeshTask) {
+        self.mesh_tasks.push(task);
+    }
+
+    /// Method that should be called when leaving a view, which will no longer be needed.
+    pub fn reset_gpu(&mut self) {
+        self.backend().reset_gpu();
     }
 }

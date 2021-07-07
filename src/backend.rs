@@ -1,7 +1,7 @@
 use crate::{
     Result,
     geom::{Rectangle, Vector},
-    graphics::{Background::Col, BlendMode, Color, GpuTriangle, Image, ImageScaleStrategy, PixelFormat, Surface, Vertex},
+    graphics::{Background::Col, BlendMode, Color, MeshTask, GpuTriangle, Image, ImageScaleStrategy, PixelFormat, Surface, Texture, Vertex},
     input::MouseCursor,
 };
 
@@ -9,17 +9,27 @@ pub(crate) trait Backend {
     type Platform;
 
     unsafe fn new(platform: Self::Platform, texture_mode: ImageScaleStrategy, multisample: bool) -> Result<Self> where Self: Sized;
-
     unsafe fn set_blend_mode(&mut self, blend: BlendMode);
     unsafe fn reset_blend_mode(&mut self);
 
     unsafe fn clear(&mut self, color: Color);
     unsafe fn draw(&mut self, vertices: &[Vertex], triangles: &[GpuTriangle]) -> Result<()>;
-    unsafe fn flush(&mut self);
+    unsafe fn flush(&mut self) -> Result<()>;
     fn present(&self) -> Result<()>;
 
     unsafe fn create_texture(&mut self, data: &[u8], width: u32, height: u32, format: PixelFormat) -> Result<ImageData>;
     unsafe fn destroy_texture(&mut self, data: &mut ImageData);
+
+    fn create_texture_unit(&mut self, texture: &Texture) -> Result<(usize)>;
+    fn prepare_texture(&mut self, vertex_shader: &str, fragment_shader: &str) -> Result<usize>;
+    fn upload_texture(&mut self, idx: usize, data: &[u8], width: u32, height: u32, format: PixelFormat) -> Result<()>;
+    fn update_texture(&mut self, idx: usize, data: &[u8], rect: &Rectangle, format: PixelFormat) -> Result<()>;
+    fn configure_texture<CB>(&mut self, idx: usize, fields: &Vec<(String, u32)>, cb: CB, out_color: &str, tex_name: &str) -> Result<()>
+    where CB: Fn(Vertex) -> Vec<f32> + 'static;
+
+    unsafe fn execute_tasks(&mut self, tasks: &Vec<MeshTask>) -> Result<()>;
+    fn reset_gpu(&mut self);
+
 
     unsafe fn create_surface(&mut self, image: &Image) -> Result<SurfaceData>;
     unsafe fn bind_surface(&mut self, surface: &Surface);
@@ -30,6 +40,7 @@ pub(crate) trait Backend {
     unsafe fn set_viewport(&mut self, area: Rectangle) where Self: Sized;
 
     unsafe fn screenshot(&self, format: PixelFormat) -> (Vector, Vec<u8>);
+    unsafe fn capture(&self, rect: &Rectangle, format: PixelFormat) -> (Vector, Vec<u8>);
 
     fn set_cursor(&mut self, cursor: MouseCursor);
     fn set_title(&mut self, title: &str);
@@ -48,7 +59,7 @@ pub(crate) trait Backend {
             GpuTriangle::new(0, [0, 1, 2], 0.0, Col(color)),
             GpuTriangle::new(0, [2, 3, 0], 0.0, Col(color))
         ])?;
-        self.flush();
+        self.flush()?;
         Ok(())
     }
 }
